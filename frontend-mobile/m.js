@@ -50,11 +50,17 @@ async function openMobileCamera() {
     const error = document.getElementById("m-camera-error");
     modal.hidden = false;
     error.hidden = true;
+    document.getElementById("m-camera-snap").disabled = true;
     try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported.");
         mobileCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
         video.srcObject = mobileCameraStream;
+        await new Promise(resolve => {
+            if (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth > 0) return resolve();
+            video.addEventListener("loadedmetadata", resolve, { once: true });
+        });
         await video.play();
+        document.getElementById("m-camera-snap").disabled = false;
     } catch (cameraError) {
         error.hidden = false;
         error.textContent = `${cameraError.message} Choose a photo instead.`;
@@ -71,6 +77,12 @@ function closeMobileCamera() {
 function snapMobileCamera() {
     const video = document.getElementById("m-camera-preview");
     const canvas = document.getElementById("m-camera-canvas");
+    if (!video.videoWidth || !video.videoHeight || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const error = document.getElementById("m-camera-error");
+        error.hidden = false;
+        error.textContent = "Camera is still starting. Wait for the preview, then try Capture again.";
+        return;
+    }
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);

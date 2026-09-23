@@ -55,7 +55,8 @@ function closeCamera() {
     capturedPhoto = null;
     const modal = document.getElementById("camera-modal");
     if (modal) modal.hidden = true;
-    document.getElementById("camera-preview")?.removeAttribute("srcObject");
+    const video = document.getElementById("camera-preview");
+    if (video) video.srcObject = null;
 }
 
 async function openCamera() {
@@ -64,11 +65,17 @@ async function openCamera() {
     const error = document.getElementById("camera-error");
     modal.hidden = false;
     error.hidden = true;
+    document.getElementById("camera-snap").disabled = true;
     try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported in this browser.");
         cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
         video.srcObject = cameraStream;
+        await new Promise(resolve => {
+            if (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth > 0) return resolve();
+            video.addEventListener("loadedmetadata", resolve, { once: true });
+        });
         await video.play();
+        document.getElementById("camera-snap").disabled = false;
     } catch (cameraError) {
         error.hidden = false;
         error.textContent = `${cameraError.message} Select a photo instead.`;
@@ -79,6 +86,12 @@ async function openCamera() {
 function snapCamera() {
     const video = document.getElementById("camera-preview");
     const canvas = document.getElementById("camera-canvas");
+    if (!video.videoWidth || !video.videoHeight || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const error = document.getElementById("camera-error");
+        error.hidden = false;
+        error.textContent = "Camera is still starting. Wait for the preview, then try Capture again.";
+        return;
+    }
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext("2d").drawImage(video, 0, 0);
