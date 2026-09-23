@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <!-- Phones get the dedicated mobile app at /m (override with ?desktop=1) -->
+    <script>
+        (function () {
+            try {
+                var p = location.pathname;
+                if (p !== "/" && p !== "/index.html") return;
+                if (/[?&]desktop=1/.test(location.search) || localStorage.getItem("traceForceDesktop") === "1") return;
+                var coarse = window.matchMedia("(pointer: coarse)").matches;
+                var narrow = window.matchMedia("(max-width: 820px)").matches;
+                if (narrow || (coarse && ("ontouchstart" in window))) {
+                    location.replace("/m/" + location.hash);
+                }
+            } catch (e) { /* fall through to desktop UI */ }
+        })();
+    </script>
+    <title>TRACE AI &bull; Legal Metrology Officer Console</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Auth Gate: blocks the app until a valid session exists. This is UX only --
+         the real security boundary is enforced server-side on every endpoint. -->
+    <div id="auth-gate" class="modal-backdrop" style="display: none; z-index: 2000;">
+        <div class="modal-card glass-card" style="max-width: 420px;">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-scale-balanced"></i> TRACE AI &bull; Officer Access</div>
+            </div>
+            <div class="modal-body">
+                <div class="auth-tabs">
+                    <button class="auth-tab active" id="auth-tab-register" onclick="switchAuthTab('register')">
+                        <i class="fa-solid fa-user-plus"></i> Register
+                    </button>
+                    <button class="auth-tab" id="auth-tab-login" onclick="switchAuthTab('login')">
+                        <i class="fa-solid fa-right-to-bracket"></i> Sign In
+                    </button>
+                </div>
+
+                <!-- Step 1: Registration (comes before login) -->
+                <div id="auth-panel-register" class="auth-panel active">
+                    <div class="auth-intro">
+                        Register once as a <strong>Legal Metrology Officer</strong>. Your jurisdiction is stored on your
+                        profile and filled in automatically from then on.
+                    </div>
+                    <div class="form-group">
+                        <label>Officer Name</label>
+                        <input type="text" id="reg-name" class="form-control" placeholder="e.g. Ananya Sharma" autocomplete="name">
+                    </div>
+                    <div class="form-group">
+                        <label>Officer ID</label>
+                        <input type="text" id="reg-officer-id" class="form-control" placeholder="e.g. LMO-014" autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="reg-password" class="form-control" placeholder="At least 8 characters" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label>Jurisdiction</label>
+                        <input type="text" id="reg-jurisdiction" class="form-control" placeholder="e.g. Chennai District">
+                    </div>
+                    <div id="reg-error" class="auth-error"></div>
+                </div>
+
+                <!-- Step 2: Sign in (jurisdiction is never asked for again) -->
+                <div id="auth-panel-login" class="auth-panel">
+                    <div class="auth-intro">
+                        <strong>Officers</strong> conduct inspections and record findings.
+                        <strong>Controllers</strong> get oversight, rule control, and verdict overrides.
+                    </div>
+                    <div class="form-group">
+                        <label>Officer Name</label>
+                        <input type="text" id="auth-name" class="form-control" placeholder="e.g. Ananya Sharma" autocomplete="name">
+                    </div>
+                    <div class="form-group">
+                        <label>Officer ID</label>
+                        <input type="text" id="auth-email" class="form-control" placeholder="LMO-001" autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="auth-password" class="form-control" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" autocomplete="current-password">
+                    </div>
+                    <div id="auth-error" class="auth-error"></div>
+                    <div class="auth-hint">
+                        Demo &mdash; Officer: <code>Ananya Sharma</code> / <code>LMO-001</code> / <code>Inspector@123</code><br>
+                        Controller: <code>Priya Nair</code> / <code>CLM-001</code> / <code>Manager@123</code>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="auth-submit-btn" style="width: 100%; justify-content: center;"
+                    onclick="submitAuth()">
+                    <i class="fa-solid fa-user-plus"></i> Create Officer Account
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+        <div class="header-left">
+            <div class="emblem-container">
+                <i class="fa-solid fa-scale-balanced emblem-icon"></i>
+            </div>
+            <div class="brand-info">
+                <div class="brand-title">TRACE<span class="brand-accent"> AI</span></div>
+                <div class="brand-subtitle">Transparent Regulatory Assessment & Compliance Engine
+                </div>
+            </div>
+        </div>
+
+        <button class="nav-toggle" id="nav-toggle-btn" type="button" onclick="toggleMobileNav()"
+            aria-label="Toggle navigation menu">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <nav class="header-nav">
+            <button class="nav-btn" id="nav-officerdash-btn" onclick="switchView('officer-dashboard')" style="display: none;">
+                <i class="fa-solid fa-gauge-high"></i> Dashboard
+            </button>
+            <button class="nav-btn" id="nav-newinspection-btn" onclick="switchView('new-inspection')" style="display: none;">
+                <i class="fa-solid fa-clipboard-list"></i> New
+            </button>
+            <button class="nav-btn" id="nav-activeinspections-btn" onclick="switchView('active-inspections')" style="display: none;">
+                <i class="fa-solid fa-folder-open"></i> Active
+            </button>
+            <button class="nav-btn active" id="nav-scanner-btn" onclick="switchView('scanner')">
+                <i class="fa-solid fa-barcode"></i> Scanner
+            </button>
+            <button class="nav-btn" id="nav-myscans-btn" onclick="switchView('myscans')" style="display: none;">
+                <i class="fa-solid fa-list-check"></i> History
+            </button>
+            <button class="nav-btn" id="nav-reports-btn" onclick="switchView('reports')" style="display: none;">
+                <i class="fa-solid fa-file-shield"></i> Reports
+            </button>
+            <button class="nav-btn" id="nav-dashboard-btn" onclick="switchView('dashboard')">
+                <i class="fa-solid fa-chart-line"></i> Dashboard
+            </button>
+            <button class="nav-btn" id="nav-gallery-btn" onclick="switchView('gallery')">
+                <i class="fa-solid fa-boxes-stacked"></i> Gallery&nbsp;<span id="gallery-count">52</span>
+            </button>
+            <button class="nav-btn" id="nav-rules-btn" onclick="openRulesModal()">
+                <i class="fa-solid fa-gavel"></i> Rules
+            </button>
+        </nav>
+
+        <div class="header-right">
+            <div class="engine-badge">
+                <span class="status-dot online"></span>
+                <span class="engine-text">CLIP + EasyOCR Engine Online</span>
+            </div>
+            <div class="officer-badge">
+                <i class="fa-solid fa-user-shield"></i>
+                <span id="user-badge-text">Not signed in</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" id="logout-btn" onclick="logout()" style="display: none;">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+
+        <!-- ================= VIEW 1: AI SCANNER (DEFAULT) ================= -->
+        <section id="view-scanner" class="view-section active">
+            <!-- Shown only when this scan is being taken for a product inside an active
+                 inspection session (see scanSampleForProduct() in app.js); hidden for
+                 today's ordinary ad-hoc scan. -->
+            <div id="scan-context-banner" class="glass-card sample-context-banner" style="display: none;"></div>
+
+            <!-- Top Input Control Bar -->
+            <div class="input-panel glass-card">
+                <div class="input-tabs">
+                    <button class="tab-btn active" onclick="switchInputMode('dataset')">
+                        <i class="fa-solid fa-images"></i> 1-Click Dataset Sample
+                    </button>
+                    <button class="tab-btn" onclick="switchInputMode('upload')">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Upload Single Image
+                    </button>
+                    <button class="tab-btn" onclick="switchInputMode('dual')">
+                        <i class="fa-solid fa-layer-group"></i> Dual-Panel (Front + Back)
+                    </button>
+                    <button class="tab-btn" onclick="switchInputMode('camera')">
+                        <i class="fa-solid fa-camera"></i> Live Device Camera
+                    </button>
+                </div>
+
+                <!-- Input Mode 1: Dataset Quick Carousel -->
+                <div id="mode-dataset" class="input-mode-content active">
+                    <div class="dataset-carousel-container">
+                        <div class="carousel-hint">
+                            <i class="fa-solid fa-hand-pointer"></i> Select any packaged commodity from the food dataset
+                            to inspect:
+                        </div>
+                        <div id="dataset-chips-container" class="dataset-chips">
+                            <!-- Populated dynamically via JS -->
+                            <div class="loader-inline"><i class="fa-solid fa-spinner fa-spin"></i> Loading 52 packaged
+                                products...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Mode 2: File Upload Zone -->
+                <div id="mode-upload" class="input-mode-content">
+                    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                        <i class="fa-solid fa-file-arrow-up drop-icon"></i>
+                        <div class="drop-title">Drag & Drop Product Image Here</div>
+                        <div class="drop-sub">Supports JPEG, JPG, PNG, and iPhone HEIC photos</div>
+                        <input type="file" id="file-input" accept="image/*,.heic" style="display: none;"
+                            onchange="handleFileUpload(event)">
+                    </div>
+                </div>
+
+                <!-- Input Mode 3: Dual-Panel Multi-Angle Inspection (Front + Back) -->
+                <div id="mode-dual" class="input-mode-content">
+                    <div class="dual-upload-grid">
+                        <div class="dual-drop-zone" id="dual-drop-front"
+                            onclick="document.getElementById('dual-file-front').click()">
+                            <span class="dual-panel-tag"><i class="fa-solid fa-file-lines"></i> Front Panel</span>
+                            <i class="fa-solid fa-image drop-icon"></i>
+                            <div class="drop-title" id="front-file-label">Select Front Display Panel</div>
+                            <div class="drop-sub" id="front-file-sub">Brand, Net Qty, Principal Visuals</div>
+                            <input type="file" id="dual-file-front" accept="image/*,.heic" style="display: none;"
+                                onchange="handleDualFileSelect('front', event)">
+                        </div>
+
+                        <div class="dual-drop-zone" id="dual-drop-back"
+                            onclick="document.getElementById('dual-file-back').click()">
+                            <span class="dual-panel-tag"><i class="fa-solid fa-barcode"></i> Back / Crimp Panel</span>
+                            <i class="fa-solid fa-receipt drop-icon"></i>
+                            <div class="drop-title" id="back-file-label">Select Back / Crimp Panel</div>
+                            <div class="drop-sub" id="back-file-sub">MRP, Dates, Address, Consumer Care</div>
+                            <input type="file" id="dual-file-back" accept="image/*,.heic" style="display: none;"
+                                onchange="handleDualFileSelect('back', event)">
+                        </div>
+                    </div>
+                    <div class="dual-action-bar">
+                        <button class="btn btn-emerald" id="btn-run-dual-scan" onclick="executeDualPanelScan()">
+                            <i class="fa-solid fa-layer-group"></i> Run Dual-Panel Compliance Inspection
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Mode 4: Live Camera -->
+                <div id="mode-camera" class="input-mode-content">
+                    <div class="camera-wrapper">
+                        <video id="camera-feed" autoplay playsinline></video>
+                        <canvas id="camera-canvas" style="display: none;"></canvas>
+                        <div class="camera-controls">
+                            <button class="btn btn-primary" onclick="startCamera()"><i class="fa-solid fa-video"></i>
+                                Start Camera</button>
+                            <button class="btn btn-accent" onclick="captureCamera()"><i class="fa-solid fa-camera"></i>
+                                Capture & Inspect</button>
+                            <button class="btn btn-secondary" onclick="stopCamera()"><i class="fa-solid fa-stop"></i>
+                                Stop</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Processing Visualizer Overlay -->
+            <div id="processing-loader" class="processing-card glass-card" style="display: none;">
+                <div class="processing-spinner">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i>
+                </div>
+                <div class="processing-text-block">
+                    <div id="processing-step-title" class="processing-title">Executing AI Pipeline...</div>
+                    <div id="processing-step-desc" class="processing-desc">Preprocessing image & applying EXIF
+                        rotation...</div>
+                </div>
+                <div class="pipeline-steps-bar">
+                    <div class="step-node active" id="pstep-1"><span>1</span> Preprocessing</div>
+                    <div class="step-node" id="pstep-2"><span>2</span> CLIP Visual AI</div>
+                    <div class="step-node" id="pstep-3"><span>3</span> Vector Similarity</div>
+                    <div class="step-node" id="pstep-4"><span>4</span> EasyOCR Detection</div>
+                    <div class="step-node" id="pstep-5"><span>5</span> Legal Metrology Rules</div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ================= VIEW: INSPECTION DETAIL (both roles; not in the nav bar --
+             reached after a scan, or by clicking a row in My Scans / the manager
+             Dashboard history table) ================= -->
+        <section id="view-detail" class="view-section">
+            <button class="btn btn-secondary btn-sm" style="margin-bottom: 16px;" onclick="goBackFromDetail()">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+
+            <!-- Shown only when this sample was just scanned inside an inspection-session
+                 product (see renderInspectionResults() in app.js); hidden for an ordinary
+                 ad-hoc scan or a historical record opened from any list. -->
+            <div id="sample-context-banner" class="glass-card sample-context-banner" style="display: none;"></div>
+
+            <!-- Inspection Results Grid (Rendered when inspection data is ready) -->
+            <div id="inspection-results" class="results-layout" style="display: none;">
+
+                <!-- Left Column: Visual Evidence Canvas & Detections -->
+                <div class="results-left">
+                    <div class="glass-card evidence-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-eye"></i> Visual Evidence & Label Regions
+                            </div>
+                            <div class="box-filters" id="box-filter-toggles">
+                                <button class="filter-pill active" onclick="filterBBoxes('all')">All</button>
+                                <button class="filter-pill" onclick="filterBBoxes('mrp')">MRP</button>
+                                <button class="filter-pill" onclick="filterBBoxes('net_quantity')">Net Qty</button>
+                                <button class="filter-pill" onclick="filterBBoxes('manufacturer')">Manufacturer</button>
+                                <button class="filter-pill" onclick="filterBBoxes('date')">Dates</button>
+                                <button class="filter-pill" onclick="filterBBoxes('consumer_care')">Care</button>
+                            </div>
+                        </div>
+
+                        <!-- Dual Panel Switcher Toolbar (Visible when dual-panel scan executed) -->
+                        <div id="panel-toggle-toolbar" class="panel-toggle-toolbar" style="display: none;">
+                            <button class="panel-pill active" id="pill-panel-front"
+                                onclick="switchVisualPanel('front')">
+                                <i class="fa-solid fa-file-image"></i> Front Panel (<span id="front-box-count">0</span>)
+                            </button>
+                            <button class="panel-pill" id="pill-panel-back" onclick="switchVisualPanel('back')">
+                                <i class="fa-solid fa-copy"></i> Back Panel (<span id="back-box-count">0</span>)
+                            </button>
+                            <span class="dual-badge"><i class="fa-solid fa-circle-check"></i> Dual-Panel
+                                Synchronized</span>
+                        </div>
+
+                        <div class="canvas-container" id="canvas-container">
+                            <canvas id="evidence-canvas"></canvas>
+                            <div id="canvas-tooltip" class="canvas-tooltip"></div>
+                        </div>
+
+                        <div class="canvas-legend">
+                            <span class="legend-item"><span class="legend-box tag-mrp"></span> MRP</span>
+                            <span class="legend-item"><span class="legend-box tag-qty"></span> Net Qty</span>
+                            <span class="legend-item"><span class="legend-box tag-mfg"></span> Manufacturer</span>
+                            <span class="legend-item"><span class="legend-box tag-date"></span> Dates</span>
+                            <span class="legend-item"><span class="legend-box tag-care"></span> Consumer Care</span>
+                            <span class="legend-item"><span class="legend-box tag-gen"></span> General Text</span>
+                        </div>
+                    </div>
+
+                    <!-- Quality & Readability Assessment under Rule 7 -->
+                    <div class="glass-card readability-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-magnifying-glass-chart"></i> Legibility & Rule 7 Readability Audit
+                            </div>
+                            <span id="readability-badge" class="badge">Checking</span>
+                        </div>
+                        <div class="metrics-grid">
+                            <div class="metric-box">
+                                <div class="metric-label">Sharpness (Laplacian)</div>
+                                <div class="metric-value" id="blur-score">--</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">RMS Contrast</div>
+                                <div class="metric-value" id="contrast-score">--</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">Avg Box Height</div>
+                                <div class="metric-value" id="font-height">--</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">Text Area Coverage</div>
+                                <div class="metric-value" id="text-coverage">--</div>
+                            </div>
+                        </div>
+                        <div id="readability-warnings" class="readability-warnings"></div>
+                    </div>
+
+                    <!-- CLIP Vector Similarity Matches -->
+                    <div class="glass-card similarity-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-vector-square"></i> CLIP Visual Vector Matches (Top-3 Similar
+                                Packaging)
+                            </div>
+                        </div>
+                        <div class="similar-products-grid" id="similar-products-container">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Compliance Decision, Extracted Fields & Rules -->
+                <div class="results-right">
+
+                    <!-- Overall Status Banner -->
+                    <div id="compliance-banner" class="compliance-banner glass-card">
+                        <div class="banner-top">
+                            <div class="banner-status-badge" id="banner-status-tag">COMPLIANT</div>
+                            <div class="banner-confidence">
+                                <span class="conf-label">System Confidence:</span>
+                                <span class="conf-val" id="banner-conf-val">94%</span>
+                            </div>
+                        </div>
+                        <div class="banner-summary" id="banner-summary-text">
+                            All statutory declarations verified under Legal Metrology Rules, 2011.
+                        </div>
+                        <div class="banner-actions">
+                            <button class="btn btn-emerald" onclick="downloadReport()">
+                                <i class="fa-solid fa-file-lines"></i> Certificate (HTML)
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportReport('pdf')">
+                                <i class="fa-solid fa-file-pdf"></i> PDF
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportReport('docx')">
+                                <i class="fa-solid fa-file-word"></i> Word (Editable)
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportReport('json')">
+                                <i class="fa-solid fa-file-code"></i> JSON
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportReport('csv')">
+                                <i class="fa-solid fa-file-csv"></i> CSV
+                            </button>
+                            <button class="btn btn-amber" id="btn-record-decision" onclick="openReviewModal()">
+                                <i class="fa-solid fa-user-pen"></i> Record Decision
+                            </button>
+                            <button class="btn btn-amber" id="btn-override-verdict" onclick="openOverrideModal()" style="display: none;">
+                                <i class="fa-solid fa-gavel"></i> Override Verdict
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Statutory Violations Alert Box -->
+                    <div id="violations-container" class="violations-alert-box glass-card" style="display: none;">
+                        <div class="alert-title"><i class="fa-solid fa-triangle-exclamation"></i> Statutory Violations
+                            Detected</div>
+                        <ul id="violations-list" class="violations-list"></ul>
+                    </div>
+
+                    <!-- Mandatory Declarations Key-Value Breakdown -->
+                    <div class="glass-card declarations-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-list-check"></i> Extracted Mandatory Declarations
+                            </div>
+                            <div class="clip-category-pill" id="clip-category-badge">Category: Food</div>
+                        </div>
+
+                        <div class="declarations-grid">
+                            <!-- Product Name -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-tag"></i> Generic Product Name</div>
+                                <div class="decl-value" id="field-product-name">--</div>
+                                <div class="decl-status" id="status-product-name"><i
+                                        class="fa-solid fa-circle-question"></i></div>
+                            </div>
+                            <!-- Brand -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-certificate"></i> Brand</div>
+                                <div class="decl-value" id="field-brand">--</div>
+                                <div class="decl-status" id="status-brand"><i class="fa-solid fa-circle-question"></i>
+                                </div>
+                            </div>
+                            <!-- Net Quantity -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-weight-scale"></i> Net Quantity</div>
+                                <div class="decl-value" id="field-net-quantity">--</div>
+                                <div class="decl-status" id="status-net-quantity"><i
+                                        class="fa-solid fa-circle-question"></i></div>
+                            </div>
+                            <!-- MRP -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-indian-rupee-sign"></i> Maximum Retail
+                                    Price (MRP)</div>
+                                <div class="decl-value" id="field-mrp">--</div>
+                                <div class="decl-status" id="status-mrp"><i class="fa-solid fa-circle-question"></i>
+                                </div>
+                            </div>
+                            <!-- Statutory Unit Sale Price (USP) Rule 6(10) -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-calculator"></i> Unit Sale Price [Rule
+                                    6(10)]</div>
+                                <div class="decl-value" id="field-usp">--</div>
+                                <div class="decl-status" id="status-usp"><i class="fa-solid fa-circle-question"></i>
+                                </div>
+                            </div>
+                            <!-- Dates -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-calendar-days"></i> Mfg / Packing Date
+                                </div>
+                                <div class="decl-value" id="field-mfg-date">--</div>
+                                <div class="decl-status" id="status-mfg-date"><i
+                                        class="fa-solid fa-circle-question"></i></div>
+                            </div>
+                            <!-- Best Before -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-clock-rotate-left"></i> Best Before /
+                                    Expiry</div>
+                                <div class="decl-value" id="field-best-before">--</div>
+                                <div class="decl-status" id="status-best-before"><i
+                                        class="fa-solid fa-circle-question"></i></div>
+                            </div>
+                            <!-- Manufacturer -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-industry"></i> Manufacturer & Address
+                                </div>
+                                <div class="decl-value" id="field-manufacturer">--</div>
+                                <div class="decl-status" id="status-manufacturer"><i
+                                        class="fa-solid fa-circle-question"></i></div>
+                            </div>
+                            <!-- Consumer Care -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-headset"></i> Consumer Care Details</div>
+                                <div class="decl-value" id="field-consumer-care">--</div>
+                                <div class="decl-status" id="status-consumer-care"><i
+                                        class="fa-solid fa-circle-question"></i></div>
+                            </div>
+                            <!-- FSSAI -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-shield-halved"></i> FSSAI Lic. Number
+                                </div>
+                                <div class="decl-value" id="field-fssai">--</div>
+                                <div class="decl-status" id="status-fssai"><i class="fa-solid fa-circle-question"></i>
+                                </div>
+                            </div>
+                            <!-- Country of Origin -->
+                            <div class="decl-row">
+                                <div class="decl-field"><i class="fa-solid fa-earth-asia"></i> Country of Origin</div>
+                                <div class="decl-value" id="field-origin">--</div>
+                                <div class="decl-status" id="status-origin"><i class="fa-solid fa-circle-question"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Statutory Rule Validation Table -->
+                    <div class="glass-card rules-card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-gavel"></i> Statutory Legal Metrology Audit (Rules 2011)
+                            </div>
+                        </div>
+                        <div class="rules-table-wrapper">
+                            <table class="rules-table">
+                                <thead>
+                                    <tr>
+                                        <th>Rule ID</th>
+                                        <th>Mandate</th>
+                                        <th>Status</th>
+                                        <th>Statutory Findings</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rules-table-body">
+                                    <!-- Populated via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW: MY SCANS (Inspector-only own-scan history) ================= -->
+        <section id="view-myscans" class="view-section">
+            <div class="dash-head">
+                <div>
+                    <h2 class="dash-title">Inspection History</h2>
+                    <div class="dash-sub">Browse by inspection session, then drill into the products inspected in each
+                        one &mdash; officers only see their own records, by design.</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="loadHistory2()"><i
+                        class="fa-solid fa-rotate-right"></i> Refresh</button>
+            </div>
+
+            <!-- Level 1: session-wise history (default). "All Scans" keeps the flat
+                 per-sample list reachable, including ad-hoc scans not tied to a session. -->
+            <div class="box-filters" style="margin-bottom: 16px;">
+                <button class="filter-pill active" id="histmode-sessions" onclick="switchHistoryMode('sessions')">
+                    <i class="fa-solid fa-folder-tree"></i> By Session
+                </button>
+                <button class="filter-pill" id="histmode-scans" onclick="switchHistoryMode('scans')">
+                    <i class="fa-solid fa-list-check"></i> All Scans
+                </button>
+            </div>
+
+            <div id="history-sessions-pane" class="glass-card history-card">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-folder-tree"></i> Inspection Sessions</div>
+                    <div class="history-filters">
+                        <select id="history-session-status" onchange="loadSessionHistory()">
+                            <option value="">All sessions</option>
+                            <option value="ACTIVE">In progress</option>
+                            <option value="CLOSED">Closed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="history-table-wrapper">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Inspection ID</th>
+                                <th>Started</th>
+                                <th>Location</th>
+                                <th>Type</th>
+                                <th>Products</th>
+                                <th>Compliant</th>
+                                <th>Non-Compliant</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-sessions-body">
+                            <tr><td colspan="8" style="text-align:center;color:#6b7280;padding:24px;">Loading&hellip;</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="history-scans-pane" class="glass-card history-card" style="display: none;">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> My Inspection History</div>
+                    <div class="history-filters">
+                        <div class="history-search">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="myscans-search-input"
+                                placeholder="Search ID, product, brand..." oninput="applyMyScansFilter()">
+                        </div>
+                        <select id="myscans-status-filter" onchange="applyMyScansFilter()">
+                            <option value="">All statuses</option>
+                            <option value="COMPLIANT">Compliant</option>
+                            <option value="REVIEW_REQUIRED">Review Required</option>
+                            <option value="NON_COMPLIANT">Non-Compliant</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="history-table-wrapper">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Inspection ID</th>
+                                <th>Timestamp</th>
+                                <th>Product / Image</th>
+                                <th>Category</th>
+                                <th>Compliance Status</th>
+                                <th>Confidence</th>
+                                <th>Violations</th>
+                                <th>Reports</th>
+                            </tr>
+                        </thead>
+                        <tbody id="myscans-table-body">
+                            <tr>
+                                <td colspan="8" style="text-align: center; color: #6b7280; padding: 24px;">No scans
+                                    yet &mdash; use the AI Scanner tab.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW 2: DASHBOARD ================= -->
+        <section id="view-dashboard" class="view-section">
+
+            <div class="dash-head">
+                <div>
+                    <h2 class="dash-title">Compliance Overview</h2>
+                    <div class="dash-sub">Legal Metrology (Packaged Commodities) Rules, 2011 &middot; Enforcement
+                        dashboard</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="loadDashboard()"><i
+                        class="fa-solid fa-rotate-right"></i> Refresh</button>
+            </div>
+
+            <div class="bento">
+
+                <!-- Hero: Compliance rate + gauge -->
+                <div class="bento-card hero">
+                    <div class="bento-label">Compliance rate</div>
+                    <div class="bento-headline" id="bento-compliance-rate">--%</div>
+                    <div class="bento-trend" id="bento-compliance-trend">&nbsp;</div>
+                    <div class="bento-body center" id="bento-compliance-gauge"></div>
+                </div>
+
+                <!-- Total inspections + sparkline -->
+                <div class="bento-card">
+                    <div class="bento-label">Total inspections</div>
+                    <div class="bento-headline" id="bento-total">--</div>
+                    <div class="bento-trend" id="bento-total-trend">&nbsp;</div>
+                    <div class="bento-body" id="bento-total-spark"></div>
+                </div>
+
+                <!-- Pending review donut -->
+                <div class="bento-card">
+                    <div class="bento-label">Pending review</div>
+                    <div class="bento-headline" id="bento-review">--</div>
+                    <div class="bento-trend muted-trend">Manual verification queue</div>
+                    <div class="bento-body center" id="bento-review-donut"></div>
+                </div>
+
+                <!-- Extraction confidence + area -->
+                <div class="bento-card">
+                    <div class="bento-label">Avg AI confidence</div>
+                    <div class="bento-headline" id="bento-confidence">--%</div>
+                    <div class="bento-trend muted-trend">Across all pipeline runs</div>
+                    <div class="bento-body center" id="bento-confidence-spark"></div>
+                </div>
+
+                <!-- Category distribution -->
+                <div class="bento-card">
+                    <div class="bento-label">Category distribution</div>
+                    <div class="bento-segs" id="bento-categories" style="margin-top: 14px;"></div>
+                </div>
+
+                <!-- Recent inspections (tall) -->
+                <div class="bento-card tall">
+                    <div class="bento-label">Recent inspections</div>
+                    <div class="bento-timeline" id="bento-timeline" style="margin-top: 10px;"></div>
+                </div>
+
+                <!-- Flagged violations -->
+                <div class="bento-card">
+                    <div class="row">
+                        <div class="bento-label">Flagged violations</div>
+                        <div class="mini-chip">&#9888;</div>
+                    </div>
+                    <div class="bento-list" id="bento-violations" style="margin-top: 10px;"></div>
+                </div>
+
+                <!-- Inspection calendar -->
+                <div class="bento-card">
+                    <div class="bento-label">Activity &mdash; last 14 days</div>
+                    <div class="cal-grid" id="bento-calendar"></div>
+                </div>
+
+                <!-- Hold rate -->
+                <div class="bento-card">
+                    <div class="bento-label">Hold rate</div>
+                    <div class="bento-headline sm" id="bento-hold">--%</div>
+                    <div class="bento-body center" id="bento-hold-spark"></div>
+                </div>
+
+                <!-- Field-level detection (tall) -->
+                <div class="bento-card tall">
+                    <div class="bento-label">Field detection rate</div>
+                    <div class="bento-fields" id="bento-fields" style="margin-top: 10px;"></div>
+                </div>
+
+                <!-- This week -->
+                <div class="bento-card">
+                    <div class="bento-label">This week</div>
+                    <div class="bento-headline sm" id="bento-week-scans">--</div>
+                    <div class="bento-trend muted-trend">scans in the last 7 days</div>
+                    <div class="bento-body" id="bento-week-meter"></div>
+                </div>
+
+                <!-- Most common violation -->
+                <div class="bento-card">
+                    <div class="bento-label">Most common violation</div>
+                    <div class="bento-topviol" id="bento-topviol" style="margin-top: 12px;"></div>
+                </div>
+
+                <!-- Violations logged stat -->
+                <div class="bento-card">
+                    <div class="bento-label">Violations logged</div>
+                    <div class="bento-headline sm" id="bento-violation-total">--</div>
+                    <div class="bento-trend muted-trend">Statutory failures recorded</div>
+                    <div class="bento-body" id="bento-verdict-split"></div>
+                </div>
+
+                <!-- Violations by type (wide) -->
+                <div class="bento-card wide">
+                    <div class="bento-label">Violations by type</div>
+                    <div class="bento-bars" id="bento-violation-bars" style="margin-top: 14px;"></div>
+                </div>
+
+            </div>
+
+            <!-- Recent Inspections History Table -->
+            <div class="glass-card history-card">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-clock-rotate-left"></i> Recent Statutory Inspections
+                    </div>
+                    <div class="history-filters">
+                        <div class="history-search">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="history-search-input"
+                                placeholder="Search ID, product, brand, manufacturer..." oninput="applyHistoryFilter()">
+                        </div>
+                        <select id="history-status-filter" onchange="applyHistoryFilter()">
+                            <option value="">All statuses</option>
+                            <option value="COMPLIANT">Compliant</option>
+                            <option value="REVIEW_REQUIRED">Review Required</option>
+                            <option value="NON_COMPLIANT">Non-Compliant</option>
+                        </select>
+                        <select id="history-inspector-filter" onchange="applyHistoryFilter()" title="Controller-only: filter by officer">
+                            <option value="">All officers</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" onclick="loadDashboard()"><i
+                                class="fa-solid fa-rotate-right"></i> Refresh</button>
+                    </div>
+                </div>
+                <div class="history-table-wrapper">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Inspection ID</th>
+                                <th>Timestamp</th>
+                                <th>Product / Image</th>
+                                <th>Category</th>
+                                <th>Compliance Status</th>
+                                <th>Confidence</th>
+                                <th>Violations</th>
+                                <th>Reports</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body">
+                            <tr>
+                                <td colspan="8" style="text-align: center; color: #6b7280; padding: 24px;">No
+                                    inspections recorded yet. Start scanning above!</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW 3: DATASET GALLERY ================= -->
+        <section id="view-gallery" class="view-section">
+            <div class="gallery-header glass-card">
+                <div>
+                    <h2 style="margin: 0; font-size: 18px;">Packaged Commodity Dataset Repository</h2>
+                    <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">Pre-indexed catalog of 52 packaged
+                        products across Food, Beverages, Personal Care & Commodities. Click any item for instant AI
+                        inspection.</div>
+                </div>
+                <div class="gallery-search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="gallery-search-input" placeholder="Filter by product name, category..."
+                        oninput="filterGallery()">
+                </div>
+            </div>
+
+            <div class="gallery-grid" id="gallery-grid-container">
+                <!-- Populated dynamically via JS -->
+            </div>
+        </section>
+
+        <!-- ================= VIEW: OFFICER DASHBOARD (inspector-only) ================= -->
+        <section id="view-officer-dashboard" class="view-section">
+            <div class="dash-head">
+                <div>
+                    <h2 class="dash-title">Officer Dashboard</h2>
+                    <div class="dash-sub">Your inspection activity at a glance.</div>
+                </div>
+                <button class="btn btn-primary" onclick="switchView('new-inspection')">
+                    <i class="fa-solid fa-plus"></i> Start New Inspection
+                </button>
+            </div>
+
+            <div class="glass-card officer-card">
+                <div class="officer-hero">
+                    <div class="officer-avatar"><i class="fa-solid fa-user-shield"></i></div>
+                    <div class="officer-identity">
+                        <div class="officer-name" id="officer-name-display">--</div>
+                        <div class="officer-role" id="officer-role-display">Legal Metrology Officer</div>
+                    </div>
+                    <div class="officer-chips">
+                        <span class="info-chip chip-muted">
+                            <i class="fa-solid fa-id-badge"></i> Officer ID <strong id="officer-id-display">--</strong>
+                        </span>
+                        <span class="info-chip">
+                            <i class="fa-solid fa-location-dot"></i> Jurisdiction
+                            <strong id="officer-jurisdiction-display">--</strong>
+                        </span>
+                    </div>
+                </div>
+                <div id="jurisdiction-setup-row" class="jurisdiction-setup" style="display: none;">
+                    <div class="jurisdiction-setup-hint">
+                        <i class="fa-solid fa-circle-exclamation"></i>
+                        Set your jurisdiction once &mdash; it is auto-populated on every inspection from then on.
+                    </div>
+                    <div class="jurisdiction-input-row">
+                        <input type="text" id="jurisdiction-input" class="form-control" placeholder="e.g. Bengaluru Urban District">
+                        <button class="btn btn-primary" onclick="submitJurisdiction()">
+                            <i class="fa-solid fa-check"></i> Save
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-grid">
+                <div class="glass-card stat-tile stat-gold">
+                    <div class="stat-tile-icon"><i class="fa-solid fa-folder-open"></i></div>
+                    <div class="stat-tile-value" id="officer-metric-active">--</div>
+                    <div class="stat-tile-label">Active Inspections</div>
+                </div>
+                <div class="glass-card stat-tile stat-green">
+                    <div class="stat-tile-icon"><i class="fa-solid fa-circle-check"></i></div>
+                    <div class="stat-tile-value" id="officer-metric-completed">--</div>
+                    <div class="stat-tile-label">Completed Inspections</div>
+                </div>
+                <div class="glass-card stat-tile stat-amber">
+                    <div class="stat-tile-icon"><i class="fa-solid fa-hourglass-half"></i></div>
+                    <div class="stat-tile-value" id="officer-metric-pending">--</div>
+                    <div class="stat-tile-label">Pending Reviews</div>
+                </div>
+                <div class="glass-card stat-tile stat-red">
+                    <div class="stat-tile-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div class="stat-tile-value" id="officer-metric-noncompliant">--</div>
+                    <div class="stat-tile-label">Non-Compliance Findings</div>
+                </div>
+            </div>
+
+            <div class="glass-card officer-card">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-folder-open"></i> Open Inspections</div>
+                    <button class="btn btn-secondary btn-sm" onclick="switchView('active-inspections')">
+                        View all
+                    </button>
+                </div>
+                <div id="officer-open-sessions">
+                    <div class="empty-note"><i class="fa-solid fa-clipboard-list"></i> Loading&hellip;</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW: NEW INSPECTION (inspector-only) ================= -->
+        <section id="view-new-inspection" class="view-section">
+            <div class="dash-head">
+                <div>
+                    <h2 class="dash-title">New Inspection</h2>
+                    <div class="dash-sub">Officer identity, jurisdiction, and inspection ID are captured automatically.</div>
+                </div>
+            </div>
+            <div class="glass-card officer-card form-card">
+                <div class="officer-banner">
+                    <div class="officer-banner-avatar"><i class="fa-solid fa-user-shield"></i></div>
+                    <div class="officer-banner-body">
+                        <div class="officer-banner-label">Inspecting Officer</div>
+                        <div class="officer-banner-name" id="ni-officer">--</div>
+                        <div class="officer-banner-meta">
+                            <span class="info-chip"><i class="fa-solid fa-id-badge"></i> <strong id="ni-officer-id">--</strong></span>
+                            <span class="info-chip"><i class="fa-solid fa-location-dot"></i> <strong id="ni-jurisdiction">--</strong></span>
+                            <span class="info-chip chip-muted"><i class="fa-solid fa-clock"></i> <strong id="ni-datetime">--</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Inspection Location</label>
+                        <input type="text" id="ni-location" class="form-control" placeholder="e.g. ABC Mart, MG Road">
+                    </div>
+                    <div class="form-group">
+                        <label>Inspection Type</label>
+                        <select id="ni-inspection-type" class="form-control">
+                            <option value="Routine">Routine</option>
+                            <option value="Special">Special</option>
+                            <option value="Complaint-based">Complaint-based</option>
+                            <option value="Enforcement">Enforcement</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes (optional)</label>
+                    <textarea id="ni-notes" class="form-control" rows="3" placeholder="Any additional context for this inspection..."></textarea>
+                </div>
+                <div id="ni-error" style="display: none; color: var(--status-fail); font-size: 12.5px; margin-bottom: 10px;"></div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" onclick="startNewInspection()">
+                        <i class="fa-solid fa-play"></i> Start Inspection
+                    </button>
+                    <button class="btn btn-secondary" onclick="switchView('officer-dashboard')">Cancel</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW: ACTIVE INSPECTIONS (inspector-only) ================= -->
+        <section id="view-active-inspections" class="view-section">
+            <div class="dash-head">
+                <div>
+                    <h2 class="dash-title">Active Inspections</h2>
+                    <div class="dash-sub">Inspections you have started but not yet closed.</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="loadActiveInspections()">
+                    <i class="fa-solid fa-rotate-right"></i> Refresh
+                </button>
+            </div>
+            <div class="glass-card history-card">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-folder-open"></i> In Progress</div>
+                </div>
+                <div class="history-table-wrapper">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Inspection ID</th>
+                                <th>Started</th>
+                                <th>Location</th>
+                                <th>Type</th>
+                                <th>Products</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-inspections-table-body">
+                            <tr><td colspan="6" style="text-align: center; color: #6b7280; padding: 24px;">No active inspections &mdash; start one from the Dashboard.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW: REPORTS (inspector-only; lists all inspections, open one for its report links) ================= -->
+        <section id="view-reports" class="view-section">
+            <div class="dash-head">
+                <div>
+                    <h2 class="dash-title">Reports</h2>
+                    <div class="dash-sub">Open an inspection to view or download its per-sample reports.</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="loadReportsSessions()">
+                    <i class="fa-solid fa-rotate-right"></i> Refresh
+                </button>
+            </div>
+            <div class="glass-card history-card">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-file-shield"></i> All Inspections</div>
+                </div>
+                <div class="history-table-wrapper">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Inspection ID</th>
+                                <th>Started</th>
+                                <th>Location</th>
+                                <th>Type</th>
+                                <th>Products</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reports-table-body">
+                            <tr><td colspan="6" style="text-align: center; color: #6b7280; padding: 24px;">No inspections yet.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= VIEW: INSPECTION SESSION WORKSPACE (inspector-only; not in
+             the nav bar -- reached from New Inspection, Active Inspections, or Reports) ================= -->
+        <section id="view-session-workspace" class="view-section">
+            <button class="btn btn-secondary btn-sm" style="margin-bottom: 16px;" onclick="goBackFromWorkspace()">
+                <i class="fa-solid fa-arrow-left"></i> Back
+            </button>
+
+            <div class="glass-card session-hero">
+                <div class="session-hero-top">
+                    <div class="session-id">
+                        <i class="fa-solid fa-clipboard-list"></i>
+                        <span id="workspace-session-id">--</span>
+                    </div>
+                    <span id="workspace-status-badge" class="badge">--</span>
+                </div>
+                <div class="session-meta">
+                    <span class="info-chip"><i class="fa-solid fa-user-shield"></i> <strong id="workspace-officer">--</strong></span>
+                    <span class="info-chip"><i class="fa-solid fa-location-dot"></i> <strong id="workspace-jurisdiction">--</strong></span>
+                    <span class="info-chip"><i class="fa-solid fa-shop"></i> <strong id="workspace-location">--</strong></span>
+                    <span class="info-chip"><i class="fa-solid fa-tag"></i> <strong id="workspace-type">--</strong></span>
+                    <span class="info-chip chip-muted"><i class="fa-solid fa-clock"></i> <strong id="workspace-date">--</strong></span>
+                </div>
+                <div id="workspace-notes" class="session-notes" style="display: none;"></div>
+                <div class="session-actions">
+                    <button class="btn btn-primary btn-sm" id="btn-add-product" onclick="openAddProductModal()">
+                        <i class="fa-solid fa-plus"></i> Add Product
+                    </button>
+                    <button class="btn btn-amber btn-sm" id="btn-close-session" onclick="closeCurrentSession()">
+                        <i class="fa-solid fa-lock"></i> Close Inspection
+                    </button>
+                    <button class="btn btn-seize btn-sm" id="btn-seize-session" onclick="confirmSeizure()" style="display: none;">
+                        <i class="fa-solid fa-hand"></i> Confirm Seizure
+                    </button>
+                </div>
+            </div>
+
+            <!-- Violation reports auto-generated to manufacturers on seizure -->
+            <div id="seizure-panel" class="glass-card officer-card" style="display: none;">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-file-shield"></i> Manufacturer Violation Reports</div>
+                    <span class="badge badge-fail">SEIZED</span>
+                </div>
+                <div id="seizure-reports"></div>
+            </div>
+
+            <div class="products-head">
+                <h3><i class="fa-solid fa-boxes-stacked"></i> Products Under Inspection</h3>
+                <div class="products-head-right">
+                    <span class="products-count" id="workspace-products-count"></span>
+                    <select id="product-status-filter" onchange="applyProductFilter()" title="Filter products by compliance status">
+                        <option value="">All products</option>
+                        <option value="COMPLIANT">Compliant</option>
+                        <option value="NON_COMPLIANT">Non-Compliant</option>
+                        <option value="REVIEW_REQUIRED">Review required</option>
+                        <option value="NOT_INSPECTED">Not yet inspected</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="session-products-container">
+                <!-- Populated dynamically via JS: one .product-card per product -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal 1: Inspector's own post-scan decision (approve / rescan / hold). -->
+    <div id="review-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-user-shield"></i> Officer Post-Scan Decision</div>
+                <button class="modal-close" onclick="closeReviewModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">Your own routine
+                    call on this scan, made right after scanning. Only you can record it, and only on your own scans.</div>
+                <div class="form-group">
+                    <label>Officer ID</label>
+                    <input type="text" id="review-officer-id" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Decision</label>
+                    <select id="review-decision" class="form-control">
+                        <option value="APPROVED">APPROVE (Mark Compliant)</option>
+                        <option value="REJECTED_NON_COMPLIANT">RESCAN REQUIRED (Statutory Violation Notice)</option>
+                        <option value="PENDING">HOLD for Further Review</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Officer Inspection Notes / Findings</label>
+                    <textarea id="review-notes" class="form-control" rows="3"
+                        placeholder="Enter statutory notes, physical verification remarks, or seizure notice details..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeReviewModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitReview()">Submit Decision</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 1b: Manager overriding an ALREADY-RECORDED verdict. Distinct action,
+         distinct endpoint (/override), distinct audit trail from the modal above. -->
+    <div id="override-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-gavel"></i> Controller Verdict Override</div>
+                <button class="modal-close" onclick="closeOverrideModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px;">Changes an
+                    already-recorded verdict after the fact. Logged as a distinct, permanent audit event separate
+                    from the inspector's own decision -- a written reason is mandatory.</div>
+                <div class="form-group">
+                    <label>New Verdict</label>
+                    <select id="override-status" class="form-control">
+                        <option value="COMPLIANT">COMPLIANT</option>
+                        <option value="NON_COMPLIANT">NON-COMPLIANT</option>
+                        <option value="REVIEW_REQUIRED">REVIEW REQUIRED</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Written Reason <span style="color: var(--status-fail);">(required)</span></label>
+                    <textarea id="override-reason" class="form-control" rows="3"
+                        placeholder="Mandatory justification, e.g. physical re-inspection findings, evidence reviewed..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeOverrideModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitOverride()">Submit Override</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 1c: Add a product to the active inspection session. -->
+    <div id="add-product-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card glass-card">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-box"></i> Add Product</div>
+                <button class="modal-close" onclick="closeAddProductModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Product Name</label>
+                    <input type="text" id="ap-product-name" class="form-control" placeholder="e.g. ABC Biscuits">
+                </div>
+                <div class="form-group">
+                    <label>Manufacturer / Packer</label>
+                    <input type="text" id="ap-manufacturer" class="form-control" placeholder="e.g. ABC Foods Pvt. Ltd.">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Total Quantity Available</label>
+                        <input type="number" id="ap-total-quantity" class="form-control" min="1" placeholder="e.g. 500">
+                    </div>
+                    <div class="form-group">
+                        <label>Samples to Inspect</label>
+                        <input type="number" id="ap-sample-target" class="form-control" min="1" placeholder="e.g. 32">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Product Category</label>
+                        <input type="text" id="ap-category" class="form-control" placeholder="e.g. Bakery / Biscuits">
+                    </div>
+                    <div class="form-group">
+                        <label>Location in Premises</label>
+                        <input type="text" id="ap-location" class="form-control" placeholder="e.g. Aisle 4">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes (optional)</label>
+                    <textarea id="ap-notes" class="form-control" rows="2"></textarea>
+                </div>
+                <div id="ap-error" style="display: none; color: var(--status-fail); font-size: 12.5px; margin-bottom: 8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddProductModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitAddProduct()">Add Product</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Rules Configuration Drawer -->
+    <div id="rules-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card glass-card rules-modal-card">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-scale-unbalanced-flip"></i> Legal Metrology Rule Engine
+                    Configuration</div>
+                <button class="modal-close" onclick="closeRulesModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 16px;">Configure statutory rules based on
+                    the Legal Metrology (Packaged Commodities) Rules, 2011 and amendments.</div>
+                <div class="rules-config-list" id="rules-config-list">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeRulesModal()">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.deepeval/
+venv/
+.venv/
+
+# Runtime data (databases, generated files, uploads)
+*.db
+*.db-journal
+backend/database/thumbnails/
+backend/reporting/generated_reports/
+storage/
+
+# Datasets and sample documents
+FOOD/
+OLAI_samples/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

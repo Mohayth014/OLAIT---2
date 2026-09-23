@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0E0E1A">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>TRACE AI &bull; Mobile Inspector</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="m.css">
+</head>
+
+<body>
+    <!-- Login gate: UX only, the real boundary is enforced server-side on every endpoint -->
+    <div class="mlogin" id="m-login" hidden>
+        <div class="mlogin-card">
+            <div class="mlogo" style="width:52px;height:52px;font-size:22px;margin:0 auto 14px;">
+                <i class="fa-solid fa-scale-balanced"></i></div>
+            <div class="mlogin-title">TRACE AI</div>
+            <div class="mlogin-sub">Inspectors scan packages. Managers get oversight, rules &amp; overrides.</div>
+            <input type="email" id="m-auth-email" class="mlogin-input" placeholder="Email" autocomplete="username">
+            <input type="password" id="m-auth-password" class="mlogin-input" placeholder="Password" autocomplete="current-password">
+            <div class="mlogin-error" id="m-auth-error" hidden></div>
+            <button class="mbig-btn gold" style="width:100%" onclick="submitLogin()">
+                <i class="fa-solid fa-right-to-bracket"></i><span>Sign in</span></button>
+            <div class="mlogin-demo">Inspector &middot; inspector1@trace.gov / Inspector@123<br>
+                Manager &middot; manager1@trace.gov / Manager@123</div>
+        </div>
+    </div>
+
+    <header class="mtop">
+        <div class="mbrand">
+            <span class="mlogo"><i class="fa-solid fa-scale-balanced"></i></span>
+            <span class="mbrand-txt">TRACE <b>AI</b></span>
+        </div>
+        <div class="mtop-right">
+            <span class="mdot" id="m-engine-dot" title="Engine online"></span>
+            <span class="muser-badge" id="m-user-badge" hidden></span>
+            <button class="micon-btn msm" id="m-logout-btn" onclick="logout()" title="Sign out" hidden>
+                <i class="fa-solid fa-right-from-bracket"></i></button>
+        </div>
+    </header>
+
+    <main class="mmain">
+
+        <!-- ================= SCAN ================= -->
+        <section class="mview active" id="view-scan">
+            <div class="mhero">
+                <div class="mhero-h">Inspect a package</div>
+                <div class="mhero-sub">Legal Metrology (Packaged Commodities) Rules, 2011</div>
+
+                <div class="mseg" id="m-mode-seg">
+                    <button class="mseg-btn active" data-mode="single">Single panel</button>
+                    <button class="mseg-btn" data-mode="dual">Front + Back</button>
+                </div>
+
+                <div class="mcapture" id="m-cap-single">
+                    <label class="mbig-btn gold">
+                        <input type="file" accept="image/*" capture="environment" hidden id="m-file-cam">
+                        <i class="fa-solid fa-camera"></i><span>Take photo</span>
+                    </label>
+                    <label class="mbig-btn ghost">
+                        <input type="file" accept="image/*" hidden id="m-file-lib">
+                        <i class="fa-solid fa-image"></i><span>Upload from gallery</span>
+                    </label>
+                </div>
+
+                <div class="mcapture dual" id="m-cap-dual" hidden>
+                    <div class="mtile" id="m-tile-front">
+                        <div class="mtile-tag">Front (PDP)</div>
+                        <i class="fa-solid fa-file-image mtile-ico"></i>
+                        <div class="mtile-label" id="m-tile-front-label">Add front panel</div>
+                        <div class="mtile-row">
+                            <label class="mmini"><input type="file" accept="image/*" capture="environment" hidden
+                                    data-dual="front"><i class="fa-solid fa-camera"></i></label>
+                            <label class="mmini"><input type="file" accept="image/*" hidden data-dual="front"><i
+                                    class="fa-solid fa-image"></i></label>
+                        </div>
+                    </div>
+                    <div class="mtile" id="m-tile-back">
+                        <div class="mtile-tag">Back / crimp</div>
+                        <i class="fa-solid fa-receipt mtile-ico"></i>
+                        <div class="mtile-label" id="m-tile-back-label">Add back panel</div>
+                        <div class="mtile-row">
+                            <label class="mmini"><input type="file" accept="image/*" capture="environment" hidden
+                                    data-dual="back"><i class="fa-solid fa-camera"></i></label>
+                            <label class="mmini"><input type="file" accept="image/*" hidden data-dual="back"><i
+                                    class="fa-solid fa-image"></i></label>
+                        </div>
+                    </div>
+                    <button class="mbig-btn gold" id="m-run-dual" disabled><i class="fa-solid fa-layer-group"></i><span>Run
+                            dual-panel inspection</span></button>
+                </div>
+            </div>
+
+            <div class="msec-h">Or try a dataset sample</div>
+            <div class="mchips" id="m-chips">
+                <div class="mchip-skel"></div>
+                <div class="mchip-skel"></div>
+                <div class="mchip-skel"></div>
+            </div>
+
+            <div class="msec-h">Recent inspections</div>
+            <div class="mrecent" id="m-recent">
+                <div class="mrecent-empty">No inspections yet.</div>
+            </div>
+        </section>
+
+        <!-- ================= ACTIVITY ================= -->
+        <section class="mview" id="view-activity">
+            <div class="msearch">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="m-search" placeholder="Search id, product, brand, manufacturer" inputmode="search">
+            </div>
+            <div class="mfilter" id="m-filter">
+                <button class="mf-chip active" data-st="">All</button>
+                <button class="mf-chip" data-st="COMPLIANT">Compliant</button>
+                <button class="mf-chip" data-st="REVIEW_REQUIRED">Review</button>
+                <button class="mf-chip" data-st="NON_COMPLIANT">Failed</button>
+            </div>
+            <select class="minspselect" id="m-inspector-filter" hidden>
+                <option value="">All inspectors</option>
+            </select>
+            <div class="mlist" id="m-list">
+                <div class="mlist-skel"></div>
+                <div class="mlist-skel"></div>
+                <div class="mlist-skel"></div>
+            </div>
+        </section>
+
+        <!-- ================= STATS ================= -->
+        <section class="mview" id="view-stats">
+            <div class="mstat-grid" id="m-stat-grid"></div>
+            <div class="mcard">
+                <div class="mcard-h">Category distribution</div>
+                <div class="mbars" id="m-cat"></div>
+            </div>
+            <div class="mcard">
+                <div class="mcard-h">Field detection rate</div>
+                <div class="mbars" id="m-fields"></div>
+            </div>
+            <div class="mcard">
+                <div class="mcard-h">Violations by type</div>
+                <div class="mbars" id="m-viol"></div>
+            </div>
+            <a class="mnote" href="/?desktop=1">Rule configuration &amp; officer review live on the desktop console
+                <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+        </section>
+
+        <!-- ================= RESULT (full-screen overlay) ================= -->
+        <section class="mresult" id="m-result" hidden>
+            <div class="mresult-bar">
+                <button class="micon-btn" id="m-result-back" aria-label="Back"><i
+                        class="fa-solid fa-arrow-left"></i></button>
+                <div class="mresult-title" id="m-result-title">Inspection</div>
+                <button class="micon-btn" id="m-result-share" aria-label="Share report"><i
+                        class="fa-solid fa-arrow-up-from-bracket"></i></button>
+            </div>
+            <div class="mresult-body" id="m-result-body"></div>
+        </section>
+
+        <!-- ================= PROCESSING overlay ================= -->
+        <div class="mproc" id="m-proc" hidden>
+            <div class="mproc-card">
+                <div class="mproc-spin"><i class="fa-solid fa-circle-notch fa-spin"></i></div>
+                <div class="mproc-title" id="m-proc-title">Preprocessing image&hellip;</div>
+                <div class="mproc-steps" id="m-proc-steps"></div>
+            </div>
+        </div>
+    </main>
+
+    <nav class="mnav">
+        <button class="mnav-btn active" data-view="scan"><i class="fa-solid fa-barcode"></i><span>Scan</span></button>
+        <button class="mnav-btn" data-view="activity"><i
+                class="fa-solid fa-clock-rotate-left"></i><span>Activity</span></button>
+        <button class="mnav-btn" data-view="stats"><i class="fa-solid fa-chart-simple"></i><span>Stats</span></button>
+    </nav>
+
+    <script src="m.js"></script>
+</body>
+
+</html>
