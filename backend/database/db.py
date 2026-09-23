@@ -1,5 +1,6 @@
 import sqlite3
 import uuid
+import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from backend.config import DATABASE_PATH, DEFAULT_LANGUAGE
@@ -124,12 +125,22 @@ CREATE TABLE IF NOT EXISTS training_pairs (
     created_at          TEXT NOT NULL
 );
 
+-- CLIP image embeddings are kept separately so the page schema remains
+-- compatible with existing installations and future vector backends.
+CREATE TABLE IF NOT EXISTS page_embeddings (
+    page_id             INTEGER PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
+    embedding_json      TEXT NOT NULL,
+    model               TEXT,
+    created_at           TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_pages_document ON pages(document_id, page_number);
 CREATE INDEX IF NOT EXISTS idx_lines_page ON lines(page_id, line_order);
 CREATE INDEX IF NOT EXISTS idx_lines_review ON lines(review_status);
 CREATE INDEX IF NOT EXISTS idx_candidates_line ON candidates(line_id, rank);
 CREATE INDEX IF NOT EXISTS idx_outputs_page ON outputs(page_id, kind);
 CREATE INDEX IF NOT EXISTS idx_jobs_document ON jobs(document_id);
+CREATE INDEX IF NOT EXISTS idx_page_embeddings_page ON page_embeddings(page_id);
 """
 
 
@@ -217,11 +228,118 @@ def update_document_status(document_id: str, status: str, error: Optional[str] =
     conn.close()
 
 
+def set_document_source_type(document_id: str, source_type: str, confidence: Optional[float], manual: bool = False) -> None:
+    conn = get_connection()
+    conn.execute(
+        """UPDATE documents
+           SET source_type = ?, source_confidence = ?, source_manual = ?, updated_at = ?
+           WHERE id = ?""",
+        (source_type, confidence, int(manual), _now(), document_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def delete_document(document_id: str) -> None:
     conn = get_connection()
     conn.execute("DELETE FROM documents WHERE id = ?", (document_id,))
     conn.commit()
     conn.close()
+
+
+def upsert_page(document_id: str, page_number: int, **values: Any) -> int:
+    allowed = {"image_path", "thumbnail_path", "width", "height", "extraction_method",
+               "text_layer_score", "quality_json", "status", "review_status", "processed_at"}
+    fields = {key: value for key, value in values.items() if key in allowed}
+    conn = get_connection()
+    existing = conn.execute(
+        "SELECT id FROM pages WHERE document_id = ? AND page_number = ?",
+        (document_id, page_number),
+    ).fetchone()
+    if existing:
+        assignments = ", ".join(f"{key} = ?" for key in fields)
+        if assignments:
+            conn.execute(
+                f"UPDATE pages SET {assignments} WHERE id = ?",
+                (*fields.values(), existing["id"]),
+            )
+        page_id = existing["id"]
+    else:
+        columns = ["document_id", "page_number", *fields.keys()]
+        placeholders = ", ".join("?" for _ in columns)
+        cursor = conn.execute(
+            f"INSERT INTO pages ({', '.join(columns)}) VALUES ({placeholders})",
+            (document_id, page_number, *fields.values()),
+        )
+        page_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return int(page_id)
+
+
+def save_page_embedding(page_id: int, embedding: Any, model: Optional[str] = None) -> None:
+    conn = get_connection()
+    conn.execute(
+        """INSERT INTO page_embeddings (page_id, embedding_json, model, created_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(page_id) DO UPDATE SET embedding_json = excluded.embedding_json,
+           model = excluded.model, created_at = excluded.created_at""",
+        (page_id, json.dumps(list(embedding)), model, _now()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_page_embeddings() -> List[Dict[str, Any]]:
+    conn = get_connection()
+    rows = conn.execute(
+        """SELECT e.page_id, e.embedding_json, p.document_id, p.page_number
+           FROM page_embeddings e JOIN pages p ON p.id = e.page_id"""
+    ).fetchall()
+    conn.close()
+    return [
+        {"page_id": row["page_id"], "document_id": row["document_id"],
+         "page_number": row["page_number"], "embedding": json.loads(row["embedding_json"])}
+        for row in rows
+    ]
+
+
+def save_recognition_page(document_id: str, page_number: int, lines: List[Dict[str, Any]], **page_values: Any) -> int:
+    """Atomically replace one page's generated layout and OCR rows."""
+    page_id = upsert_page(document_id, page_number, status="ready", processed_at=_now(), **page_values)
+    conn = get_connection()
+    conn.execute("DELETE FROM lines WHERE page_id = ?", (page_id,))
+    for region_order in sorted({line.get("region_order", 1) for line in lines}):
+        region_lines = [line for line in lines if line.get("region_order", 1) == region_order]
+        bbox = region_lines[0].get("region", {}).get("bbox", [None, None, None, None])
+        region = conn.execute(
+            """INSERT INTO regions (page_id, region_type, x0, y0, x1, y1, reading_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (page_id, "text", *bbox, region_order),
+        )
+        region_id = region.lastrowid
+        for line in region_lines:
+            conn.execute(
+                """INSERT INTO lines
+                   (page_id, region_id, line_order, ocr_text, confidence, engine, x0, y0, x1, y1, review_status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (page_id, region_id, line.get("line_order", 0), line.get("text", ""),
+                 line.get("confidence"), line.get("engine", "paddle"), *line["bbox"],
+                 "needs_review" if float(line.get("confidence", 0)) < 0.8 else "accepted", _now()),
+            )
+    conn.commit()
+    conn.close()
+    return page_id
+
+
+def processed_page_numbers(document_id: str) -> List[int]:
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT page_number FROM pages WHERE document_id = ? AND status = 'ready' ORDER BY page_number",
+        (document_id,),
+    ).fetchall()
+    conn.close()
+    return [int(row["page_number"]) for row in rows]
 
 
 # Dashboard

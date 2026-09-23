@@ -10,7 +10,9 @@ from backend.config import (
     FRONTEND_DIR, MOBILE_DIR, STORAGE_DIR, DEFAULT_LANGUAGE, LANGUAGE_PACKS, TESSERACT_CMD
 )
 from backend.models import DocumentList, DocumentSummary, Stats, HealthResponse, EngineStatus
-from backend.database.db import init_db, list_documents, get_document, get_stats
+from backend.database.db import init_db, list_documents, get_document, get_stats, set_document_source_type
+from backend.config import SOURCE_TYPES
+from backend.models import SourceTypeUpdate
 
 APP_NAME = "OLAI"
 APP_VERSION = "0.1.0"
@@ -83,6 +85,16 @@ async def document_detail(document_id: str):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found.")
     return doc
+
+
+@app.put("/api/documents/{document_id}/source-type", response_model=DocumentSummary)
+async def override_source_type(document_id: str, update: SourceTypeUpdate):
+    if update.source_type not in SOURCE_TYPES:
+        raise HTTPException(status_code=422, detail="Unknown source type.")
+    if not get_document(document_id):
+        raise HTTPException(status_code=404, detail="Document not found.")
+    set_document_source_type(document_id, update.source_type, 1.0, manual=True)
+    return get_document(document_id)
 
 
 # Static file serving:

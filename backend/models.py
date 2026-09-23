@@ -9,6 +9,7 @@ class DocumentSummary(BaseModel):
     language: str
     source_type: Optional[str] = None
     source_confidence: Optional[float] = None
+    source_manual: int = 0
     status: str
     page_count: int
     verified_pages: int = 0
@@ -42,3 +43,7 @@ class HealthResponse(BaseModel):
     version: str
     language: str
     engines: List[EngineStatus]
+
+
+class SourceTypeUpdate(BaseModel):
+    source_type: str

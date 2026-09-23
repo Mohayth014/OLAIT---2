@@ -1,6 +1,7 @@
 EXPECTED_TABLES = {
     "documents", "pages", "regions", "lines", "candidates",
     "verifications", "outputs", "jobs", "training_pairs",
+    "page_embeddings",
 }
 
 
@@ -42,6 +43,14 @@ def test_documents_list_and_detail(client, temp_db):
 
 def test_unknown_document_is_404(client):
     assert client.get("/api/documents/DOC-NOPE").status_code == 404
+
+
+def test_manual_source_override(client, temp_db):
+    doc = temp_db.create_document("scan.jpg", "storage/originals/scan.jpg", "image")
+    response = client.put(f"/api/documents/{doc['id']}/source-type", json={"source_type": "palm_leaf"})
+    assert response.status_code == 200
+    assert response.json()["source_type"] == "palm_leaf"
+    assert response.json()["source_manual"] == 1
 
 
 def test_deleting_document_cascades_to_pages(temp_db):
