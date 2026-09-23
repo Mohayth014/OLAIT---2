@@ -11,16 +11,21 @@ class CLIPEngine:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(CLIPEngine, cls).__new__(cls)
+            cls._instance._initialized = False
+        if not cls._instance._initialized:
             cls._instance._init_model()
         return cls._instance
 
     def _init_model(self):
         print(f"[CLIPEngine] Loading {CLIP_MODEL_NAME}...")
+        # Set this before model loading so a partially initialized singleton
+        # still has the configuration required by classification.
+        self.source_types = SOURCE_TYPES
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.processor = CLIPProcessor.from_pretrained(CLIP_MODEL_NAME)
         self.model = CLIPModel.from_pretrained(CLIP_MODEL_NAME, use_safetensors=True).to(self.device)
         self.model.eval()
-        self.source_types = SOURCE_TYPES
+        self._initialized = True
         print(f"[CLIPEngine] CLIP model initialized on {self.device}.")
 
     def classify_source_type(self, img: Image.Image) -> List[Dict[str, Any]]:

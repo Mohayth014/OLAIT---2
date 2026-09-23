@@ -294,7 +294,7 @@ def save_page_embedding(page_id: int, embedding: Any, model: Optional[str] = Non
            VALUES (?, ?, ?, ?)
            ON CONFLICT(page_id) DO UPDATE SET embedding_json = excluded.embedding_json,
            model = excluded.model, created_at = excluded.created_at""",
-        (page_id, json.dumps(list(embedding)), model, _now()),
+        (page_id, json.dumps([float(value) for value in embedding]), model, _now()),
     )
     conn.commit()
     conn.close()
