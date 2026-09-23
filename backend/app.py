@@ -23,6 +23,7 @@ from backend.database.db import (
 from backend.config import SOURCE_TYPES
 from backend.models import LineVerification, SourceTypeUpdate
 from backend.pipeline.preprocessing import analyze_image_quality, create_thumbnail, load_and_orient_image, resize_for_ocr
+from backend.pipeline.tamil_processor import transliterate_tamil
 
 
 def _process_photo(document_id: str, image_path: Path) -> None:
@@ -173,6 +174,9 @@ async def document_review(document_id: str):
     review = get_document_review(document_id)
     if not review:
         raise HTTPException(status_code=404, detail="Document not found.")
+    for page in review["pages"]:
+        for line in page["lines"]:
+            line["tanglish"] = transliterate_tamil(line.get("verified_text") or line.get("ocr_text", ""))
     return review
 
 
@@ -183,6 +187,7 @@ async def verify_document_line(line_id: int, verification: LineVerification):
     line = verify_line(line_id, verification.reviewer, verification.text, verification.action)
     if not line:
         raise HTTPException(status_code=404, detail="Line not found.")
+    line["tanglish"] = transliterate_tamil(line.get("verified_text") or line.get("ocr_text", ""))
     context = get_line_training_context(line_id)
     if context and context["image_path"] and verification.text.strip():
         image_path = STORAGE_DIR / context["image_path"]

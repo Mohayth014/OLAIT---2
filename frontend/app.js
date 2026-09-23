@@ -181,6 +181,7 @@ function renderOcrLine(line) {
     return `<article class="ocr-line-card" id="line-card-${line.id}" onclick="selectOcrLine(${line.id})">
         <div class="drop-sub">Line ${line.line_order + 1} &middot; Confidence ${Math.round((line.confidence || 0) * 100)}%</div>
         <textarea id="line-${line.id}" onclick="event.stopPropagation()">${escapeHtml(line.verified_text || line.ocr_text)}</textarea>
+        <div class="tanglish-label">Tanglish: <span id="tanglish-${line.id}">${escapeHtml(line.tanglish || "")}</span></div>
         <button class="nav-btn" onclick="event.stopPropagation(); verifyLine(${line.id})"><i class="fa-solid fa-check"></i> Save verification</button>
     </article>`;
 }
@@ -206,6 +207,9 @@ async function verifyLine(lineId) {
     });
     if (!response.ok) throw new Error("Could not save verification");
     document.getElementById(`line-${lineId}`).style.borderColor = "#10b981";
+    const refreshed = await response.json();
+    const tanglish = document.getElementById(`tanglish-${lineId}`);
+    if (tanglish) tanglish.textContent = refreshed.tanglish || "Saved; reload review to refresh transliteration.";
     loadStats();
 }
 

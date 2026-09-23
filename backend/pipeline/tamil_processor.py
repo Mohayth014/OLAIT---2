@@ -15,6 +15,21 @@ ZERO_WIDTH = dict.fromkeys(map(ord, "​‌‍﻿"), None)
 
 WORD_PUNCTUATION = ".,;:!?\"'()[]{}<>–—-‘’“”"
 
+TAMIL_INDEPENDENT_VOWELS = {
+    "அ": "a", "ஆ": "aa", "இ": "i", "ஈ": "ii", "உ": "u", "ஊ": "uu",
+    "எ": "e", "ஏ": "ee", "ஐ": "ai", "ஒ": "o", "ஓ": "oo", "ஔ": "au",
+}
+TAMIL_CONSONANT_ROMAN = {
+    "க": "k", "ங": "ng", "ச": "s", "ஞ": "nj", "ட": "t", "ண": "n",
+    "த": "th", "ந": "n", "ப": "p", "ம": "m", "ய": "y", "ர": "r",
+    "ல": "l", "வ": "v", "ழ": "zh", "ள": "l", "ற": "r", "ன": "n",
+    "ஜ": "j", "ஷ": "sh", "ஸ": "s", "ஹ": "h",
+}
+TAMIL_DEPENDENT_VOWELS = {
+    "ா": "aa", "ி": "i", "ீ": "ii", "ு": "u", "ூ": "uu", "ெ": "e",
+    "ே": "ee", "ை": "ai", "ொ": "o", "ோ": "oo", "ௌ": "au",
+}
+
 
 def is_tamil_char(c: str) -> bool:
     return "஀" <= c <= "௿"
@@ -29,6 +44,31 @@ def normalize_text(text: str) -> str:
         return ""
     text = unicodedata.normalize("NFC", text).translate(ZERO_WIDTH)
     return " ".join(text.split())
+
+
+def transliterate_tamil(text: str) -> str:
+    """Return a deterministic Tanglish rendering of Tamil text."""
+    text = normalize_text(text)
+    result = []
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char in TAMIL_INDEPENDENT_VOWELS:
+            result.append(TAMIL_INDEPENDENT_VOWELS[char])
+        elif char in TAMIL_CONSONANT_ROMAN:
+            roman = TAMIL_CONSONANT_ROMAN[char]
+            if index + 1 < len(text) and text[index + 1] == "்":
+                result.append(roman)
+                index += 1
+            elif index + 1 < len(text) and text[index + 1] in TAMIL_DEPENDENT_VOWELS:
+                result.append(roman + TAMIL_DEPENDENT_VOWELS[text[index + 1]])
+                index += 1
+            else:
+                result.append(roman + "a")
+        elif char != "்":
+            result.append(char)
+        index += 1
+    return "".join(result)
 
 
 def is_valid_tamil_word(word: str) -> bool:

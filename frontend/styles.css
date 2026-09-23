@@ -1452,6 +1452,8 @@ body {
 .ocr-line-card { padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: rgba(42, 42, 66, .35); cursor: pointer; transition: border-color .15s, background .15s; }
 .ocr-line-card:hover, .ocr-line-card.is-selected { border-color: #3b82f6; background: rgba(37, 99, 235, .12); }
 .ocr-line-card textarea { width: 100%; min-height: 54px; margin: 8px 0; padding: 9px; resize: vertical; box-sizing: border-box; }
+.tanglish-label { margin: 4px 0 10px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+.tanglish-label span { color: var(--text-secondary); font-family: var(--font-mono); }
 @media (max-width: 900px) { .review-layout { grid-template-columns: 1fr; } .ocr-line-list { max-height: none; } }
 
 /* --- Open-inspection quick-resume rows (officer dashboard) --- */

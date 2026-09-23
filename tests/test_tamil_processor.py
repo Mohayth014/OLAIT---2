@@ -1,7 +1,7 @@
 import pytest
 
 from backend.config import TEXT_LAYER_MIN_VALID
-from backend.pipeline.tamil_processor import normalize_text, is_valid_tamil_word, validate_text_layer
+from backend.pipeline.tamil_processor import normalize_text, is_valid_tamil_word, transliterate_tamil, validate_text_layer
 
 CORRECT_TAMIL = """தமிழ் மொழி மிகவும் பழமையானது.
 அறிவு ஒரு பெரிய செல்வம்.
@@ -35,6 +35,10 @@ def test_normalize_collapses_whitespace():
 def test_normalize_composes_two_part_vowel_signs():
     decomposed = "மொழி"  # ெ + ா typed separately
     assert normalize_text(decomposed) == "மொழி"
+
+
+def test_transliterate_tamil_returns_tanglish():
+    assert transliterate_tamil("தமிழ் மொழி") == "thamizh mozhi"
 
 
 @pytest.mark.parametrize("word", ["தமிழ்", "மொழி", "பழமையானது", "கௌரவம்", "அறிவு", "ஔவையார்", "ஸ்ரீ"])
