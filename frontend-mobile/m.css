@@ -520,3 +520,6 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* OLAI */
+.tamil { font-family: "Noto Sans Tamil", var(--font, sans-serif); }

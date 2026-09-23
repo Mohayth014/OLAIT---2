@@ -3,7 +3,7 @@ from transformers import CLIPProcessor, CLIPModel
 from PIL import Image
 from typing import List, Dict, Any, Tuple
 import numpy as np
-from backend.config import CLIP_MODEL_NAME, COMMODITY_CATEGORIES
+from backend.config import CLIP_MODEL_NAME, SOURCE_TYPES
 
 class CLIPEngine:
     _instance = None
@@ -20,36 +20,33 @@ class CLIPEngine:
         self.processor = CLIPProcessor.from_pretrained(CLIP_MODEL_NAME)
         self.model = CLIPModel.from_pretrained(CLIP_MODEL_NAME, use_safetensors=True).to(self.device)
         self.model.eval()
-        self.categories = COMMODITY_CATEGORIES
+        self.source_types = SOURCE_TYPES
         print(f"[CLIPEngine] CLIP model initialized on {self.device}.")
 
-    def classify_category(self, img: Image.Image, candidate_labels: List[str] = None) -> List[Dict[str, Any]]:
+    def classify_source_type(self, img: Image.Image) -> List[Dict[str, Any]]:
         """
-        Performs zero-shot classification on the product image against candidate categories.
-        Returns sorted list of { 'label': str, 'confidence': float, 'percentage': float }.
+        Zero-shot classification of what kind of source a page comes from
+        (modern print, historical print, handwritten, palm-leaf, inscription).
+        Returns [{'source_type', 'confidence', 'percentage'}] sorted by confidence.
         """
-        labels = candidate_labels or self.categories
+        keys = list(self.source_types.keys())
+        prompts = [self.source_types[k] for k in keys]
         # Thumbnail to 448 for speed without losing classification fidelity
         thumb = img.copy()
         thumb.thumbnail((448, 448))
 
-        inputs = self.processor(text=labels, images=thumb, return_tensors="pt", padding=True).to(self.device)
+        inputs = self.processor(text=prompts, images=thumb, return_tensors="pt", padding=True).to(self.device)
         with torch.no_grad():
             outputs = self.model(**inputs)
-            logits = outputs.logits_per_image # shape: [1, num_labels]
-            probs = logits.softmax(dim=1).squeeze().cpu().tolist()
+            probs = outputs.logits_per_image.softmax(dim=1).squeeze().cpu().tolist()
 
         if isinstance(probs, float):
             probs = [probs]
 
-        results = []
-        for label, prob in zip(labels, probs):
-            results.append({
-                "label": label,
-                "confidence": round(float(prob), 4),
-                "percentage": round(float(prob) * 100, 2)
-            })
-
+        results = [
+            {"source_type": k, "confidence": round(float(p), 4), "percentage": round(float(p) * 100, 2)}
+            for k, p in zip(keys, probs)
+        ]
         results.sort(key=lambda x: x["confidence"], reverse=True)
         return results
 
@@ -70,24 +67,6 @@ class CLIPEngine:
             image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
             embedding = image_features.squeeze().cpu().numpy()
         return embedding.astype(np.float32)
-
-    def match_brand_or_terms(self, img: Image.Image, terms: List[str]) -> List[Dict[str, Any]]:
-        """
-        Matches product image against specific candidate brand or identity terms.
-        """
-        if not terms:
-            return []
-        inputs = self.processor(text=terms, images=img, return_tensors="pt", padding=True).to(self.device)
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-            probs = outputs.logits_per_image.softmax(dim=1).squeeze().cpu().tolist()
-
-        if isinstance(probs, float):
-            probs = [probs]
-
-        ranked = [{"term": t, "score": round(float(p), 4)} for t, p in zip(terms, probs)]
-        ranked.sort(key=lambda x: x["score"], reverse=True)
-        return ranked
 
 # Global singleton helper
 _clip_engine_instance = None

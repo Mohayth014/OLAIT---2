@@ -1,21 +1,41 @@
+# OLAI - Python 3.12, Windows, NVIDIA GPU (CUDA 12.6)
+#
+# Install order matters (GPU builds come from their own package servers):
+#   1. pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+#   2. pip install paddlepaddle-gpu==3.3.1 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/
+#      (if that server is slow, download the wheel from paddle-whl.cdn.bcebos.com and pip install the file)
+#   3. pip install -r requirements.txt
+#
+# Also required outside pip: Tesseract 5 with Tamil language + script data
+# (UB-Mannheim Windows build, default path C:\Program Files\Tesseract-OCR).
+
+# Web API
 fastapi>=0.110.0
-uvicorn>=0.28.0
+uvicorn[standard]>=0.28.0
 pydantic>=2.6.0
 python-multipart>=0.0.9
-torch>=2.4.0
-torchvision>=0.19.0
-transformers>=4.40.0
-pillow>=10.4.0,<11
-pillow-heif>=0.17.0,<1.0  # 1.x requires pillow>=11.1; keep on the pillow 10.x line
-easyocr>=1.7.1
+
+# OCR + documents
+paddleocr>=3.7.0
+pytesseract>=0.3.13
+pymupdf>=1.28.0
+opencv-contrib-python==4.10.0.84   # the variant paddlex requires; do not also install opencv-python(-headless)
+pillow>=10.4.0
+pillow-heif>=0.17.0,<1.0
 numpy>=1.26.0
-opencv-python-headless>=4.9.0
+
+# AI models
+transformers>=4.40.0,<5
 scikit-learn>=1.4.0
+
+# cuDNN must match the version bundled with torch (9.10.2), or Paddle fails to load
+# when torch is imported first. pip will warn that paddlepaddle-gpu pins 9.5.1; that is expected.
+nvidia-cudnn-cu12==9.10.2.21
+
+# Tamil processing + export
+symspellpy>=6.10.0
 reportlab>=4.1.0
-python-docx>=1.1.0
+
+# Tests
 pytest>=8.0.0
 httpx>=0.27.0
-PyJWT>=2.8.0
-symspellpy>=6.10.0
-paddlepaddle>=3.3.0
-paddleocr>=3.7.0

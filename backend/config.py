@@ -1,119 +1,75 @@
-import os
 from pathlib import Path
 
 # Base Paths
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATASET_DIR = BASE_DIR / "FOOD" / "FOOD"
 DATABASE_DIR = BASE_DIR / "backend" / "database"
-DATABASE_PATH = DATABASE_DIR / "compliance.db"
-THUMBNAIL_DIR = DATABASE_DIR / "thumbnails"
-REPORTS_DIR = BASE_DIR / "backend" / "reporting" / "generated_reports"
+DATABASE_PATH = DATABASE_DIR / "olai.db"
 FRONTEND_DIR = BASE_DIR / "frontend"
 MOBILE_DIR = BASE_DIR / "frontend-mobile"
 
+# File storage: everything OLAI writes to disk lives under storage/
+STORAGE_DIR = BASE_DIR / "storage"
+ORIGINALS_DIR = STORAGE_DIR / "originals"      # uploaded files, byte-for-byte
+PAGES_DIR = STORAGE_DIR / "pages"              # one normalized image per page
+THUMBNAIL_DIR = STORAGE_DIR / "thumbnails"     # page previews for the UI
+CROPS_DIR = STORAGE_DIR / "crops"              # line crops (Tesseract input + training pairs)
+EXPORTS_DIR = STORAGE_DIR / "exports"          # generated Tamil / Tanglish / English PDFs
+
 # Ensure runtime directories exist
-DATABASE_DIR.mkdir(parents=True, exist_ok=True)
-THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+for _dir in (DATABASE_DIR, ORIGINALS_DIR, PAGES_DIR, THUMBNAIL_DIR, CROPS_DIR, EXPORTS_DIR):
+    _dir.mkdir(parents=True, exist_ok=True)
 
-# AI Models Configuration
+# Input
+ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".heic"}
+MAX_UPLOAD_MB = 500
+PDF_RENDER_DPI = 300
+
+# Languages
+# One pack per language. Only Tamil is active in the prototype; Hindi is planned
+# and will be added as another pack without touching the shared pipeline.
+DEFAULT_LANGUAGE = "ta"
+LANGUAGE_PACKS = {
+    "ta": {
+        "name": "Tamil",
+        "unicode_range": ("\u0B80", "\u0BFF"),
+        "paddle_lang": "ta",
+        "tesseract_lang": "tam",
+        "romanized_label": "Tanglish",
+    },
+}
+
+# OCR Engines
+OCR_DEVICE = "gpu"  # "gpu" or "cpu"
+TESSERACT_CMD = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+# Source types (identified once per document by CLIP zero-shot)
+# Each source type maps to a processing route; each route can use its own OCR
+# recognition model, so a model trained later (e.g. palm-leaf) plugs into one route.
+SOURCE_TYPES = {
+    "modern_print": "a page of a modern printed book or document",
+    "historical_print": "an old yellowed page from a historical printed book",
+    "handwritten": "a handwritten page or handwritten manuscript",
+    "palm_leaf": "a palm-leaf manuscript with engraved script",
+    "inscription": "a stone or copper-plate inscription",
+}
+PROCESSING_ROUTES = {
+    # route: {"paddle_rec_model": None -> use the language pack's default model}
+    "modern_print": {"paddle_rec_model": None},
+    "historical_print": {"paddle_rec_model": None},
+    "handwritten": {"paddle_rec_model": None},
+    "palm_leaf": {"paddle_rec_model": None},  # plug the trained palm-leaf model in here later
+    "inscription": {"paddle_rec_model": None},
+}
 CLIP_MODEL_NAME = "openai/clip-vit-base-patch32"
-OCR_LANGS = ["en"]
-OCR_MAX_DIMENSION = 1280  # Optimized resolution: 28% faster inference with superior CLAHE text clarity
 
-# Confidence Thresholds
-CONFIDENCE_HIGH = 0.70
-CONFIDENCE_REVIEW = 0.45
+# Priority speed rules
+# Rule 1: Tesseract only re-reads lines PaddleOCR is not highly confident about.
+TESSERACT_GATE_CONFIDENCE = 0.95   # provisional; calibrated on ground-truth pages in Phase 11
+TESSERACT_AUDIT_RATE = 0.02        # share of confident lines still re-read, to catch a bad threshold
+# Rule 2: CLIP classifies the document once, from a few sampled pages.
+CLIP_SAMPLE_PAGES = 5
+# Rule 3: digital PDFs with a valid Unicode text layer skip OCR entirely.
+TEXT_LAYER_MIN_VALID = 0.95        # share of structurally valid words required to trust a text layer
 
-# Target Commodity Categories for CLIP Zero-Shot Classification
-COMMODITY_CATEGORIES = [
-    "packaged instant noodles or pasta",
-    "soap shampoo cosmetics or personal care",
-    "packaged soft drink fruit juice or beverage",
-    "cooking oil ghee or mustard oil",
-    "packaged potato chips namkeen or savoury snacks",
-    "dairy milk paneer butter curd or cheese",
-    "packaged spices masala or condiments",
-    "atta flour rice pulses or grains packet",
-    "tea coffee or malt health drink",
-    "packaged chocolate candy or confectionery",
-    "bakery biscuits cookies or rusk",
-    "sauce ketchup mayonnaise or jam bottle",
-    "household cleaning detergent or disinfectant"
-]
-
-# Legal Metrology Default Rules Configuration
-DEFAULT_RULES = [
-    {
-        "rule_id": "LM_RULE_6_1_A",
-        "title": "Name & Address of Manufacturer / Packer / Importer",
-        "legal_reference": "Rule 6(1)(a), Legal Metrology (Packaged Commodities) Rules, 2011",
-        "field": "manufacturer_address",
-        "required": True,
-        "severity": "CRITICAL",
-        "description": "Every package shall bear the complete name and definite address of manufacturer/packer/importer including state/PIN code."
-    },
-    {
-        "rule_id": "LM_RULE_6_1_B",
-        "title": "Generic Name / Commodity Identity",
-        "legal_reference": "Rule 6(1)(b), Legal Metrology (Packaged Commodities) Rules, 2011",
-        "field": "product_name",
-        "required": True,
-        "severity": "CRITICAL",
-        "description": "The common or generic names of the commodity contained in the package shall be prominently displayed."
-    },
-    {
-        "rule_id": "LM_RULE_6_1_C",
-        "title": "Net Quantity in Standard Unit of Weight, Measure or Number",
-        "legal_reference": "Rule 6(1)(c), Legal Metrology (Packaged Commodities) Rules, 2011",
-        "field": "net_quantity",
-        "required": True,
-        "severity": "CRITICAL",
-        "description": "Net quantity shall be declared in the standard unit of weight or measure (g, kg, ml, l, m, cm) or, where the commodity is sold by number, as the number of articles. Non-standard units (gms, kilos, ltr) are prohibited."
-    },
-    {
-        "rule_id": "LM_RULE_6_1_D",
-        "title": "Month & Year of Manufacture / Packing / Import",
-        "legal_reference": "Rule 6(1)(d), Legal Metrology (Packaged Commodities) Rules, 2011",
-        "field": "mfg_date",
-        "required": True,
-        "severity": "MAJOR",
-        "description": "The month and year in which the commodity is manufactured or packed or imported shall be clearly indicated."
-    },
-    {
-        "rule_id": "LM_RULE_6_1_E",
-        "title": "Maximum Retail Price (MRP) with Tax Inclusion",
-        "legal_reference": "Rule 6(1)(e), Legal Metrology (Packaged Commodities) Rules, 2011",
-        "field": "mrp",
-        "required": True,
-        "severity": "CRITICAL",
-        "description": "Maximum Retail Price (MRP) shall be declared in Indian Rupees (₹ or Rs.) followed by 'inclusive of all taxes' or 'incl. of all taxes'."
-    },
-    {
-        "rule_id": "LM_RULE_6_1_F",
-        "title": "Consumer Care Details (Phone & Email)",
-        "legal_reference": "Rule 6(1)(f), Legal Metrology (Packaged Commodities) Rules, 2011",
-        "field": "consumer_care",
-        "required": True,
-        "severity": "MAJOR",
-        "description": "Name, address, telephone number or email address of the person or office that can be contacted for consumer grievances."
-    },
-    {
-        "rule_id": "LM_RULE_6_10",
-        "title": "Country of Origin Declaration",
-        "legal_reference": "Rule 6(10), Legal Metrology (Packaged Commodities) Rules, 2011",
-        "field": "country_of_origin",
-        "required": False,
-        "severity": "MAJOR",
-        "description": "Country of origin must be stated for all imported packages or manufactured goods."
-    },
-    {
-        "rule_id": "LM_RULE_7_READABILITY",
-        "title": "Legibility, Contrast & Minimum Size Requirements",
-        "legal_reference": "Rule 7 & Fifth Schedule, Legal Metrology Rules, 2011",
-        "field": "readability",
-        "required": True,
-        "severity": "MAJOR",
-        "description": "Declarations must be conspicuous, clearly legible, distinct in contrast to the background, and meet minimum numeral height."
-    }
-]
+# Confidence / human review
+REVIEW_CONFIDENCE = 0.80           # provisional; lines below this go to human review

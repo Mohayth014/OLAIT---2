@@ -1,5 +1,5 @@
 :root {
-    /* Deep indigo-black canvas + solid slate cards (unified "TRACE" palette) */
+    /* Deep indigo-black canvas + solid slate cards (OLAI palette, inherited from the TRACE template) */
     --bg-primary: #0E0E1A;
     --bg-secondary: #14142280;
     --bg-card: #1A1A2E;
@@ -2612,4 +2612,71 @@ body {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* =========================================================
+   OLAI
+   ========================================================= */
+.tamil {
+    font-family: 'Noto Sans Tamil', var(--font-main);
+}
+
+.mono {
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+
+.olai-hero {
+    padding: 28px 4px 24px;
+}
+.olai-hero-title {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+.olai-hero-sub {
+    font-size: 18px;
+    color: var(--accent-gold);
+    margin-top: 6px;
+}
+.olai-hero-desc {
+    max-width: 760px;
+    margin-top: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 14.5px;
+}
+
+.olai-input-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+    margin-bottom: 18px;
+}
+.olai-input-card {
+    padding: 18px;
+}
+
+.drop-zone.is-disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+.drop-zone.is-disabled:hover {
+    border-color: rgba(56, 189, 248, 0.3);
+    background: rgba(56, 189, 248, 0.02);
+}
+.olai-soon {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-gold);
+    border: 1px solid var(--border-accent);
+}
+
+@media (max-width: 900px) {
+    .olai-input-grid { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
 }

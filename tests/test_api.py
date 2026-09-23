@@ -1,0 +1,75 @@
+EXPECTED_TABLES = {
+    "documents", "pages", "regions", "lines", "candidates",
+    "verifications", "outputs", "jobs", "training_pairs",
+}
+
+
+def test_schema_has_all_tables(temp_db):
+    assert EXPECTED_TABLES <= set(temp_db.list_tables())
+
+
+def test_health_reports_engines(client):
+    res = client.get("/api/health")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["app"] == "OLAI"
+    assert body["language"] == "Tamil"
+    names = {e["name"] for e in body["engines"]}
+    assert {"PaddleOCR", "Tesseract", "CLIP", "PyMuPDF"} <= names
+
+
+def test_empty_stats(client):
+    res = client.get("/api/stats")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["documents"] == 0 and body["pages"] == 0 and body["lines_needing_review"] == 0
+
+
+def test_documents_list_and_detail(client, temp_db):
+    assert client.get("/api/documents").json() == {"documents": []}
+
+    doc = temp_db.create_document("book.pdf", "storage/originals/book.pdf", "pdf")
+    assert doc["id"].startswith("DOC-")
+    assert doc["language"] == "ta" and doc["status"] == "uploaded"
+
+    listed = client.get("/api/documents").json()["documents"]
+    assert [d["id"] for d in listed] == [doc["id"]]
+    assert listed[0]["verified_pages"] == 0
+
+    detail = client.get(f"/api/documents/{doc['id']}")
+    assert detail.status_code == 200 and detail.json()["filename"] == "book.pdf"
+
+
+def test_unknown_document_is_404(client):
+    assert client.get("/api/documents/DOC-NOPE").status_code == 404
+
+
+def test_deleting_document_cascades_to_pages(temp_db):
+    doc = temp_db.create_document("scan.jpg", "storage/originals/scan.jpg", "image")
+    conn = temp_db.get_connection()
+    conn.execute("INSERT INTO pages (document_id, page_number) VALUES (?, 1)", (doc["id"],))
+    conn.commit()
+    conn.close()
+
+    temp_db.delete_document(doc["id"])
+
+    conn = temp_db.get_connection()
+    remaining = conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
+    conn.close()
+    assert remaining == 0
+
+
+def test_invalid_status_rejected(temp_db):
+    doc = temp_db.create_document("scan.jpg", "storage/originals/scan.jpg", "image")
+    try:
+        temp_db.update_document_status(doc["id"], "COMPLIANT")
+    except ValueError:
+        return
+    raise AssertionError("legacy compliance status should be rejected")
+
+
+def test_frontends_are_served(client):
+    home = client.get("/")
+    assert home.status_code == 200 and "OLAI" in home.text
+    mobile = client.get("/m/")
+    assert mobile.status_code == 200 and "OLAI" in mobile.text
