@@ -5,6 +5,7 @@ from PIL import Image
 from backend import app as app_module
 from backend.database import db
 from backend.pipeline.preprocessing import enhance_engraved_script
+from tools.train_tamily_crnn import decode
 
 
 def test_embedding_storage_accepts_numpy_values(temp_db):
@@ -20,6 +21,15 @@ def test_engraved_preprocessing_preserves_dimensions():
     image = Image.new("RGB", (120, 40), "#9b5b2c")
     enhanced = enhance_engraved_script(image)
     assert enhanced.size == image.size
+
+
+def test_crnn_decode_keeps_batch_dimension():
+    import torch
+
+    logits = torch.full((2, 3, 3), -10.0)
+    logits[0, :, 1] = 10.0
+    logits[1, :, 2] = 10.0
+    assert decode(logits, {1: "அ", 2: "க"}) == ["அ", "க"]
 
 
 def test_process_photo_marks_review_after_recognition(temp_db, monkeypatch, tmp_path):
