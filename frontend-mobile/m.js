@@ -53,7 +53,11 @@ async function openMobileCamera() {
     document.getElementById("m-camera-snap").disabled = true;
     try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported.");
-        mobileCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        const cameraRequest = navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        mobileCameraStream = await Promise.race([
+            cameraRequest,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Camera permission timed out.")), 8000)),
+        ]);
         video.srcObject = mobileCameraStream;
         await new Promise(resolve => {
             if (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth > 0) return resolve();
@@ -62,9 +66,14 @@ async function openMobileCamera() {
         await video.play();
         document.getElementById("m-camera-snap").disabled = false;
     } catch (cameraError) {
+        mobileCameraStream?.getTracks().forEach(track => track.stop());
+        mobileCameraStream = null;
         error.hidden = false;
-        error.textContent = `${cameraError.message} Choose a photo instead.`;
-        setTimeout(() => document.getElementById("m-camera-upload")?.click(), 250);
+        error.textContent = `${cameraError.message} Opening the photo chooser instead.`;
+        setTimeout(() => {
+            closeMobileCamera();
+            document.getElementById("m-camera-upload")?.click();
+        }, 700);
     }
 }
 

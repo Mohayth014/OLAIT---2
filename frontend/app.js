@@ -68,7 +68,11 @@ async function openCamera() {
     document.getElementById("camera-snap").disabled = true;
     try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported in this browser.");
-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+        const cameraRequest = navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        cameraStream = await Promise.race([
+            cameraRequest,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Camera permission timed out.")), 8000)),
+        ]);
         video.srcObject = cameraStream;
         await new Promise(resolve => {
             if (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth > 0) return resolve();
@@ -77,9 +81,14 @@ async function openCamera() {
         await video.play();
         document.getElementById("camera-snap").disabled = false;
     } catch (cameraError) {
+        cameraStream?.getTracks().forEach(track => track.stop());
+        cameraStream = null;
         error.hidden = false;
-        error.textContent = `${cameraError.message} Select a photo instead.`;
-        setTimeout(() => document.getElementById("camera-upload")?.click(), 250);
+        error.textContent = `${cameraError.message} Opening the photo chooser instead.`;
+        setTimeout(() => {
+            closeCamera();
+            document.getElementById("camera-upload")?.click();
+        }, 700);
     }
 }
 
