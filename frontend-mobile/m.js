@@ -3,6 +3,7 @@
 const API = "/api";
 let mobileCameraStream = null;
 let mobileCapturedPhoto = null;
+let mobileCameraMode = "browser";
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -50,6 +51,7 @@ async function openMobileCamera() {
     const error = document.getElementById("m-camera-error");
     modal.hidden = false;
     error.hidden = true;
+    mobileCameraMode = "browser";
     document.getElementById("m-camera-snap").disabled = true;
     try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported.");
@@ -69,11 +71,9 @@ async function openMobileCamera() {
         mobileCameraStream?.getTracks().forEach(track => track.stop());
         mobileCameraStream = null;
         error.hidden = false;
-        error.textContent = `${cameraError.message} Opening the photo chooser instead.`;
-        setTimeout(() => {
-            closeMobileCamera();
-            document.getElementById("m-camera-upload")?.click();
-        }, 700);
+        mobileCameraMode = "server";
+        error.textContent = `${cameraError.message} Capture will use the laptop camera directly.`;
+        document.getElementById("m-camera-snap").disabled = false;
     }
 }
 
@@ -83,7 +83,17 @@ function closeMobileCamera() {
     document.getElementById("m-camera-modal").hidden = true;
 }
 
-function snapMobileCamera() {
+async function snapMobileCamera() {
+    if (mobileCameraMode === "server") {
+        const response = await fetch(`${API}/camera/snapshot`, { method: "POST" });
+        if (!response.ok) throw new Error((await response.json()).detail || "Camera capture failed");
+        mobileCapturedPhoto = new File([await response.blob()], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+        document.getElementById("m-camera-preview").hidden = true;
+        document.getElementById("m-camera-snap").hidden = true;
+        document.getElementById("m-camera-retake").hidden = false;
+        document.getElementById("m-camera-use").hidden = false;
+        return;
+    }
     const video = document.getElementById("m-camera-preview");
     const canvas = document.getElementById("m-camera-canvas");
     if (!video.videoWidth || !video.videoHeight || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {

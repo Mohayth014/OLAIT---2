@@ -3,6 +3,7 @@
 const API = "/api";
 let cameraStream = null;
 let capturedPhoto = null;
+let cameraMode = "browser";
 
 const STATUS_BADGES = {
     uploaded: ["badge-review", "Uploaded"],
@@ -65,6 +66,7 @@ async function openCamera() {
     const error = document.getElementById("camera-error");
     modal.hidden = false;
     error.hidden = true;
+    cameraMode = "browser";
     document.getElementById("camera-snap").disabled = true;
     try {
         if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported in this browser.");
@@ -84,15 +86,27 @@ async function openCamera() {
         cameraStream?.getTracks().forEach(track => track.stop());
         cameraStream = null;
         error.hidden = false;
-        error.textContent = `${cameraError.message} Opening the photo chooser instead.`;
-        setTimeout(() => {
-            closeCamera();
-            document.getElementById("camera-upload")?.click();
-        }, 700);
+        cameraMode = "server";
+        error.textContent = `${cameraError.message} Capture will use the laptop camera directly.`;
+        document.getElementById("camera-snap").disabled = false;
     }
 }
 
-function snapCamera() {
+function showCapturedPhoto(video) {
+    video.hidden = true;
+    document.getElementById("camera-snap").hidden = true;
+    document.getElementById("camera-retake").hidden = false;
+    document.getElementById("camera-use").hidden = false;
+}
+
+async function snapCamera() {
+    if (cameraMode === "server") {
+        const response = await fetch(`${API}/camera/snapshot`, { method: "POST" });
+        if (!response.ok) throw new Error((await response.json()).detail || "Laptop camera capture failed");
+        capturedPhoto = new File([await response.blob()], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+        showCapturedPhoto(document.getElementById("camera-preview"));
+        return;
+    }
     const video = document.getElementById("camera-preview");
     const canvas = document.getElementById("camera-canvas");
     if (!video.videoWidth || !video.videoHeight || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -106,10 +120,7 @@ function snapCamera() {
     canvas.getContext("2d").drawImage(video, 0, 0);
     canvas.toBlob(blob => {
         capturedPhoto = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
-        video.hidden = true;
-        document.getElementById("camera-snap").hidden = true;
-        document.getElementById("camera-retake").hidden = false;
-        document.getElementById("camera-use").hidden = false;
+        showCapturedPhoto(video);
     }, "image/jpeg", 0.92);
 }
 

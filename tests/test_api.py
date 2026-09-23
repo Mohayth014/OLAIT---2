@@ -36,6 +36,16 @@ def test_dashboard_metrics_are_available(client):
     assert "confidence_buckets" in body
 
 
+def test_camera_snapshot_endpoint(client, monkeypatch):
+    from backend import app as app_module
+
+    monkeypatch.setattr(app_module, "_capture_laptop_camera", lambda: b"jpeg-bytes")
+    response = client.post("/api/camera/snapshot")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.content == b"jpeg-bytes"
+
+
 def test_documents_list_and_detail(client, temp_db):
     assert client.get("/api/documents").json() == {"documents": []}
 

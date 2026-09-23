@@ -6,7 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, Response, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -133,6 +133,31 @@ async def health_check():
 @app.get("/api/stats", response_model=Stats)
 async def stats():
     return get_stats()
+
+
+def _capture_laptop_camera() -> bytes:
+    import cv2
+    camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    try:
+        if not camera.isOpened():
+            raise RuntimeError("Laptop camera could not be opened.")
+        ok, frame = camera.read()
+        if not ok:
+            raise RuntimeError("Laptop camera returned no frame.")
+        encoded, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        if not encoded:
+            raise RuntimeError("Laptop camera frame could not be encoded.")
+        return buffer.tobytes()
+    finally:
+        camera.release()
+
+
+@app.post("/api/camera/snapshot")
+async def camera_snapshot():
+    try:
+        return Response(content=_capture_laptop_camera(), media_type="image/jpeg")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/api/dashboard", response_model=DashboardMetrics)
