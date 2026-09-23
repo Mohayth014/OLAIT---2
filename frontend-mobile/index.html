@@ -38,13 +38,15 @@
                 <div class="mhero-sub tamil">தமிழ் ஆவணங்களை எண்ணிமமாக்குதல்</div>
 
                 <div class="mcapture" style="margin-top: 14px;">
-                    <button class="mbig-btn gold" disabled>
+                    <label class="mbig-btn gold" for="m-camera-upload">
                         <i class="fa-solid fa-camera"></i><span>Scan with camera</span>
-                    </button>
-                    <button class="mbig-btn ghost" disabled>
+                        <input id="m-camera-upload" type="file" accept="image/*" capture="environment" hidden>
+                    </label>
+                    <label class="mbig-btn ghost" for="m-document-upload">
                         <i class="fa-solid fa-file-arrow-up"></i><span>Upload document</span>
-                    </button>
-                    <div class="mrecent-empty" style="text-align: center;">Scanning and upload arrive in Phase 2.</div>
+                        <input id="m-document-upload" type="file" accept="image/*" hidden>
+                    </label>
+                    <div class="mrecent-empty" id="m-upload-status" style="text-align: center;" hidden></div>
                 </div>
             </div>
 

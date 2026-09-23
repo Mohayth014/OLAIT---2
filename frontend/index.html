@@ -89,22 +89,23 @@
 
             <div class="olai-input-grid">
                 <div class="glass-card olai-input-card">
-                    <div class="drop-zone is-disabled" title="Available in Phase 2">
+                    <label class="drop-zone" for="document-upload">
                         <i class="fa-solid fa-file-arrow-up drop-icon"></i>
                         <div class="drop-title">Upload Document</div>
-                        <div class="drop-sub">PDF, JPG, PNG or TIFF &middot; whole books supported</div>
-                        <div class="olai-soon">Available after Phase 2</div>
-                    </div>
+                        <div class="drop-sub">JPG, PNG, TIFF, WEBP or HEIC photo</div>
+                        <input id="document-upload" type="file" accept="image/*" hidden>
+                    </label>
                 </div>
                 <div class="glass-card olai-input-card">
-                    <div class="drop-zone is-disabled" title="Available in Phase 2">
+                    <label class="drop-zone" for="camera-upload">
                         <i class="fa-solid fa-camera drop-icon"></i>
-                        <div class="drop-title">Scan with Camera</div>
+                        <div class="drop-title">Take a Photo</div>
                         <div class="drop-sub">Photograph a page; OLAI crops and straightens it</div>
-                        <div class="olai-soon">Available after Phase 2</div>
-                    </div>
+                        <input id="camera-upload" type="file" accept="image/*" capture="environment" hidden>
+                    </label>
                 </div>
             </div>
+            <div id="upload-status" class="empty-note" hidden></div>
 
             <div class="stat-grid" id="stat-grid">
                 <div class="glass-card stat-tile stat-gold">

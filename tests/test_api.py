@@ -53,6 +53,31 @@ def test_manual_source_override(client, temp_db):
     assert response.json()["source_manual"] == 1
 
 
+def test_photo_upload_creates_processing_document(client, temp_db, monkeypatch, tmp_path):
+    from backend import app as app_module
+
+    monkeypatch.setattr(app_module, "ORIGINALS_DIR", tmp_path)
+    monkeypatch.setattr(app_module, "_process_photo", lambda document_id, image_path: None)
+    response = client.post(
+        "/api/documents/upload",
+        files={"file": ("page.jpg", b"fake image bytes", "image/jpeg")},
+    )
+    assert response.status_code == 202
+    body = response.json()
+    assert body["filename"] == "page.jpg"
+    assert body["file_type"] == "camera"
+    assert temp_db.get_document(body["id"])["status"] == "uploaded"
+    assert list(tmp_path.glob("*.jpg"))
+
+
+def test_photo_upload_rejects_pdf(client):
+    response = client.post(
+        "/api/documents/upload",
+        files={"file": ("document.pdf", b"pdf", "application/pdf")},
+    )
+    assert response.status_code == 415
+
+
 def test_deleting_document_cascades_to_pages(temp_db):
     doc = temp_db.create_document("scan.jpg", "storage/originals/scan.jpg", "image")
     conn = temp_db.get_connection()

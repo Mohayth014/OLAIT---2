@@ -1,18 +1,77 @@
 import importlib.util
+import asyncio
+import json
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import (
-    FRONTEND_DIR, MOBILE_DIR, STORAGE_DIR, DEFAULT_LANGUAGE, LANGUAGE_PACKS, TESSERACT_CMD
+    ALLOWED_EXTENSIONS, BASE_DIR, CROPS_DIR, FRONTEND_DIR, MAX_UPLOAD_MB, MOBILE_DIR, ORIGINALS_DIR,
+    PAGES_DIR, STORAGE_DIR, THUMBNAIL_DIR, DEFAULT_LANGUAGE, LANGUAGE_PACKS, TESSERACT_CMD,
+    PROCESSING_ROUTES,
 )
 from backend.models import DocumentList, DocumentSummary, Stats, HealthResponse, EngineStatus
-from backend.database.db import init_db, list_documents, get_document, get_stats, set_document_source_type
+from backend.database.db import (
+    create_document, get_document, get_stats, init_db, list_documents, new_document_id, save_page_embedding,
+    save_recognition_page, set_document_source_type, update_document_page_count, update_document_status,
+)
 from backend.config import SOURCE_TYPES
 from backend.models import SourceTypeUpdate
+from backend.pipeline.preprocessing import analyze_image_quality, create_thumbnail, load_and_orient_image, resize_for_ocr
+
+
+def _process_photo(document_id: str, image_path: Path) -> None:
+    """Run one uploaded photo through the async recognition pipeline."""
+    from backend.pipeline.clip_engine import get_clip_engine
+    from backend.pipeline.ocr_engine import get_ocr_engine
+    from backend.pipeline.recognition_pipeline import recognize_pages
+
+    async def run() -> None:
+        try:
+            update_document_status(document_id, "processing")
+            image = load_and_orient_image(image_path)
+            normalized, _ = resize_for_ocr(image)
+            page_dir = PAGES_DIR / document_id
+            thumbnail_dir = THUMBNAIL_DIR / document_id
+            page_dir.mkdir(parents=True, exist_ok=True)
+            thumbnail_dir.mkdir(parents=True, exist_ok=True)
+            page_path = page_dir / "page-0001.png"
+            thumbnail_path = thumbnail_dir / "page-0001.jpg"
+            normalized.save(page_path, format="PNG")
+            create_thumbnail(normalized).save(thumbnail_path, format="JPEG", quality=88)
+
+            update_document_page_count(document_id, 1)
+            page_values = {
+                "image_path": str(page_path.relative_to(STORAGE_DIR)).replace("\\", "/"),
+                "thumbnail_path": str(thumbnail_path.relative_to(STORAGE_DIR)).replace("\\", "/"),
+                "width": normalized.width,
+                "height": normalized.height,
+                "quality_json": json.dumps(analyze_image_quality(normalized)),
+                "extraction_method": "ocr",
+            }
+            clip_engine = get_clip_engine()
+            results = await recognize_pages(
+                [normalized], document_id, DEFAULT_LANGUAGE, "modern_print",
+                clip_engine, get_ocr_engine(),
+            )
+            page_result = results[0]
+            source_vote = page_result.get("source_vote", {})
+            set_document_source_type(
+                document_id, source_vote.get("source_type") or "modern_print",
+                source_vote.get("confidence", 0.0), manual=False,
+            )
+            page_id = save_recognition_page(document_id, 1, page_result["lines"], **page_values)
+            save_page_embedding(page_id, clip_engine.generate_embedding(normalized), "clip")
+            update_document_status(document_id, "review")
+        except Exception as exc:
+            update_document_status(document_id, "failed", str(exc)[:1000])
+            print(f"[OLAI] Document {document_id} failed: {exc}")
+
+    asyncio.run(run())
 
 APP_NAME = "OLAI"
 APP_VERSION = "0.1.0"
@@ -77,6 +136,27 @@ async def stats():
 @app.get("/api/documents", response_model=DocumentList)
 async def documents(limit: int = Query(100, ge=1, le=1000)):
     return {"documents": list_documents(limit=limit)}
+
+
+@app.post("/api/documents/upload", response_model=DocumentSummary, status_code=202)
+async def upload_photo(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    filename = Path(file.filename or "photo.jpg").name
+    extension = Path(filename).suffix.lower()
+    if extension not in ALLOWED_EXTENSIONS or extension == ".pdf":
+        raise HTTPException(status_code=415, detail="Upload a JPG, PNG, TIFF, WEBP, HEIC, or JPEG photo.")
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="The uploaded photo is empty.")
+    if len(contents) > MAX_UPLOAD_MB * 1024 * 1024:
+        raise HTTPException(status_code=413, detail=f"The photo exceeds the {MAX_UPLOAD_MB} MB limit.")
+
+    document_id = new_document_id()
+    original_path = ORIGINALS_DIR / f"{document_id}{extension}"
+    original_path.write_bytes(contents)
+    stored_path = str(original_path.relative_to(BASE_DIR)) if original_path.is_relative_to(BASE_DIR) else str(original_path)
+    document = create_document(filename, stored_path, "camera", document_id=document_id)
+    background_tasks.add_task(_process_photo, document_id, original_path)
+    return document
 
 
 @app.get("/api/documents/{document_id}", response_model=DocumentSummary)

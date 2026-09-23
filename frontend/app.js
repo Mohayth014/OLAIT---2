@@ -30,6 +30,37 @@ async function getJson(path) {
     return res.json();
 }
 
+async function uploadPhoto(file) {
+    const status = document.getElementById("upload-status");
+    status.hidden = false;
+    status.textContent = `Uploading ${file.name}...`;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+        const response = await fetch(`${API}/documents/upload`, { method: "POST", body: form });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Upload failed");
+        await pollDocument(body.id, status);
+        await Promise.all([loadStats(), loadDocuments("recent-documents", 5)]);
+    } catch (error) {
+        status.textContent = `Could not process photo: ${error.message}`;
+    }
+}
+
+async function pollDocument(documentId, status) {
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+        const document = await getJson(`/documents/${encodeURIComponent(documentId)}`);
+        if (document.status === "review") {
+            status.textContent = `OCR complete. ${document.page_count} page ready for human review.`;
+            return;
+        }
+        if (document.status === "failed") throw new Error(document.error || "OCR failed");
+        status.textContent = `Processing ${document.filename}... (${document.status})`;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    throw new Error("Processing is taking longer than expected; check the Library for updates.");
+}
+
 // Navigation
 
 function switchView(name) {
@@ -112,6 +143,13 @@ async function loadDocuments(targetId, limit) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    ["document-upload", "camera-upload"].forEach(id => {
+        document.getElementById(id)?.addEventListener("change", event => {
+            const [file] = event.target.files;
+            if (file) uploadPhoto(file);
+            event.target.value = "";
+        });
+    });
     loadHealth();
     loadStats();
     loadDocuments("recent-documents", 5);

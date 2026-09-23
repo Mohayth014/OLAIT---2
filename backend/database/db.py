@@ -228,6 +228,16 @@ def update_document_status(document_id: str, status: str, error: Optional[str] =
     conn.close()
 
 
+def update_document_page_count(document_id: str, page_count: int) -> None:
+    conn = get_connection()
+    conn.execute(
+        "UPDATE documents SET page_count = ?, updated_at = ? WHERE id = ?",
+        (page_count, _now(), document_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def set_document_source_type(document_id: str, source_type: str, confidence: Optional[float], manual: bool = False) -> None:
     conn = get_connection()
     conn.execute(

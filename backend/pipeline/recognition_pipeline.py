@@ -143,4 +143,5 @@ async def recognize_pages(
             page_number + 1, rng,
         )
         results.append({"page_number": page_number + 1, "lines": lines})
+        results[-1]["source_vote"] = initial["source_vote"]
     return results

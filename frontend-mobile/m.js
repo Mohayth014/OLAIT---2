@@ -14,6 +14,34 @@ async function getJson(path) {
     return res.json();
 }
 
+async function uploadPhoto(file) {
+    const status = document.getElementById("m-upload-status");
+    status.hidden = false;
+    status.textContent = `Uploading ${file.name}...`;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+        const response = await fetch(`${API}/documents/upload`, { method: "POST", body: form });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.detail || "Upload failed");
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+            const document = await getJson(`/documents/${encodeURIComponent(body.id)}`);
+            if (document.status === "review") {
+                status.textContent = "OCR complete. Page ready for human review.";
+                await loadRecent();
+                await loadStats();
+                return;
+            }
+            if (document.status === "failed") throw new Error(document.error || "OCR failed");
+            status.textContent = `Processing ${document.filename}...`;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        throw new Error("Processing is taking longer than expected.");
+    } catch (error) {
+        status.textContent = `Could not process photo: ${error.message}`;
+    }
+}
+
 function switchView(name) {
     document.querySelectorAll(".mview").forEach(v => v.classList.toggle("active", v.id === `view-${name}`));
     document.querySelectorAll(".mnav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === name));
@@ -63,6 +91,13 @@ async function loadStats() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    ["m-camera-upload", "m-document-upload"].forEach(id => {
+        document.getElementById(id)?.addEventListener("change", event => {
+            const [file] = event.target.files;
+            if (file) uploadPhoto(file);
+            event.target.value = "";
+        });
+    });
     document.querySelectorAll(".mnav-btn").forEach(b => b.addEventListener("click", () => switchView(b.dataset.view)));
     loadHealth();
     loadRecent();
