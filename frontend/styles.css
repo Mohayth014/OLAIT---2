@@ -1439,6 +1439,21 @@ body {
 }
 .empty-state-card .empty-sub { font-size: 12.5px; color: var(--text-muted); }
 
+/* OCR review: image coordinates remain linked to editable line cards. */
+.review-page { margin-top: 18px; }
+.review-page-title { color: var(--text-secondary); font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+.review-layout { display: grid; grid-template-columns: minmax(280px, 1.2fr) minmax(260px, 1fr); gap: 16px; align-items: start; }
+.ocr-image-frame { position: relative; background: #10101c; border: 1px solid var(--border-color); border-radius: var(--radius-md); line-height: 0; }
+.ocr-page-image { display: block; width: 100%; height: auto; }
+.ocr-box-layer { position: absolute; inset: 0; pointer-events: none; }
+.ocr-box { position: absolute; display: block; padding: 0; border: 2px solid #3b82f6; border-radius: 2px; background: rgba(59, 130, 246, .08); pointer-events: auto; cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; }
+.ocr-box:hover, .ocr-box.is-selected { z-index: 2; border-color: #93c5fd; background: rgba(37, 99, 235, .3); box-shadow: 0 0 0 2px rgba(147, 197, 253, .25); }
+.ocr-line-list { display: flex; flex-direction: column; gap: 10px; max-height: 720px; overflow: auto; }
+.ocr-line-card { padding: 12px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: rgba(42, 42, 66, .35); cursor: pointer; transition: border-color .15s, background .15s; }
+.ocr-line-card:hover, .ocr-line-card.is-selected { border-color: #3b82f6; background: rgba(37, 99, 235, .12); }
+.ocr-line-card textarea { width: 100%; min-height: 54px; margin: 8px 0; padding: 9px; resize: vertical; box-sizing: border-box; }
+@media (max-width: 900px) { .review-layout { grid-template-columns: 1fr; } .ocr-line-list { max-height: none; } }
+
 /* --- Open-inspection quick-resume rows (officer dashboard) --- */
 .open-session-row {
     display: flex;

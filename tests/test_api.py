@@ -95,6 +95,7 @@ def test_review_and_line_verification_are_audited(client, temp_db):
     review = client.get(f"/api/documents/{doc['id']}/review")
     assert review.status_code == 200
     assert review.json()["pages"][0]["lines"][0]["id"] == line_id
+    assert review.json()["pages"][0]["lines"][0]["x0"] == 1
     saved = client.put(f"/api/lines/{line_id}/verify", json={
         "reviewer": "Arun", "text": "மொழி சரி", "action": "edit",
     })

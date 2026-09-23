@@ -138,19 +138,60 @@ async function openReview(documentId) {
     target.innerHTML = "Loading OCR lines...";
     try {
         const document = await getJson(`/documents/${encodeURIComponent(documentId)}/review`);
-        const lines = document.pages.flatMap(page => page.lines.map(line => ({ ...line, page_number: page.page_number })));
+        const lines = document.pages.flatMap(page => page.lines.map(line => ({
+            ...line,
+            page_number: page.page_number,
+            page_width: page.width || 1,
+            page_height: page.height || 1,
+        })));
         const reviewer = localStorage.getItem("olaiReviewer") || prompt("Reviewer name");
         if (!reviewer?.trim()) throw new Error("A reviewer name is required.");
         localStorage.setItem("olaiReviewer", reviewer.trim());
-        target.innerHTML = `<div class="drop-sub" style="margin-bottom: 16px;">${escapeHtml(document.filename)} &middot; ${lines.length} OCR lines</div>` +
-            (lines.length ? lines.map(line => `<div class="glass-card" style="padding: 14px; margin: 10px 0;">
-                <div class="drop-sub">Page ${line.page_number} &middot; Confidence ${Math.round((line.confidence || 0) * 100)}%</div>
-                <textarea id="line-${line.id}" style="width: 100%; margin: 8px 0; min-height: 54px;">${escapeHtml(line.verified_text || line.ocr_text)}</textarea>
-                <button class="nav-btn" onclick="verifyLine(${line.id})"><i class="fa-solid fa-check"></i> Save verification</button>
-            </div>`).join("") : "<div class='empty-note'>No OCR lines require review.</div>");
+        target.innerHTML = `<div class="drop-sub" style="margin-bottom: 16px;">${escapeHtml(document.filename)} &middot; ${lines.length} OCR lines. Select a blue box or line to cross-reference.</div>` +
+            (lines.length ? document.pages.map(page => {
+                const pageLines = lines.filter(line => line.page_number === page.page_number);
+                const imageUrl = page.image_path ? `/storage/${page.image_path}` : "";
+                return `<section class="review-page">
+                    <div class="review-page-title">Page ${page.page_number}</div>
+                    <div class="review-layout">
+                        <div class="ocr-image-frame">
+                            ${imageUrl ? `<img class="ocr-page-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(document.filename)} page ${page.page_number}">` : ""}
+                            <div class="ocr-box-layer">${pageLines.map(line => renderOcrBox(line)).join("")}</div>
+                        </div>
+                        <div class="ocr-line-list">${pageLines.map(line => renderOcrLine(line)).join("")}</div>
+                    </div>
+                </section>`;
+            }).join("") : "<div class='empty-note'>No OCR lines require review.</div>");
     } catch (error) {
         target.innerHTML = `<div class="empty-note">Could not load review: ${escapeHtml(error.message)}</div>`;
     }
+}
+
+function renderOcrBox(line) {
+    const [x0, y0, x1, y1] = [line.x0, line.y0, line.x1, line.y1].map(Number);
+    const left = Math.max(0, (x0 / line.page_width) * 100);
+    const top = Math.max(0, (y0 / line.page_height) * 100);
+    const width = Math.max(0.5, ((x1 - x0) / line.page_width) * 100);
+    const height = Math.max(0.5, ((y1 - y0) / line.page_height) * 100);
+    return `<button class="ocr-box" id="box-${line.id}" type="button" title="${escapeHtml(line.ocr_text)}"
+        style="left:${left}%;top:${top}%;width:${width}%;height:${height}%;" onclick="selectOcrLine(${line.id})"></button>`;
+}
+
+function renderOcrLine(line) {
+    return `<article class="ocr-line-card" id="line-card-${line.id}" onclick="selectOcrLine(${line.id})">
+        <div class="drop-sub">Line ${line.line_order + 1} &middot; Confidence ${Math.round((line.confidence || 0) * 100)}%</div>
+        <textarea id="line-${line.id}" onclick="event.stopPropagation()">${escapeHtml(line.verified_text || line.ocr_text)}</textarea>
+        <button class="nav-btn" onclick="event.stopPropagation(); verifyLine(${line.id})"><i class="fa-solid fa-check"></i> Save verification</button>
+    </article>`;
+}
+
+function selectOcrLine(lineId) {
+    document.querySelectorAll(".ocr-box.is-selected").forEach(box => box.classList.remove("is-selected"));
+    document.querySelectorAll(".ocr-line-card.is-selected").forEach(card => card.classList.remove("is-selected"));
+    document.getElementById(`box-${lineId}`)?.classList.add("is-selected");
+    const card = document.getElementById(`line-card-${lineId}`);
+    card?.classList.add("is-selected");
+    card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function verifyLine(lineId) {
