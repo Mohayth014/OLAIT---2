@@ -45,6 +45,23 @@ def test_unknown_document_is_404(client):
     assert client.get("/api/documents/DOC-NOPE").status_code == 404
 
 
+def test_delete_document_removes_database_record(client, temp_db, tmp_path, monkeypatch):
+    from backend import app as app_module
+
+    original = tmp_path / "original.jpg"
+    original.write_bytes(b"photo")
+    monkeypatch.setattr(app_module, "BASE_DIR", tmp_path)
+    doc = temp_db.create_document("original.jpg", "original.jpg", "camera")
+    response = client.delete(f"/api/documents/{doc['id']}")
+    assert response.status_code == 204
+    assert temp_db.get_document(doc["id"]) is None
+    assert not original.exists()
+
+
+def test_delete_unknown_document_is_404(client):
+    assert client.delete("/api/documents/DOC-NOPE").status_code == 404
+
+
 def test_manual_source_override(client, temp_db):
     doc = temp_db.create_document("scan.jpg", "storage/originals/scan.jpg", "image")
     response = client.put(f"/api/documents/{doc['id']}/source-type", json={"source_type": "palm_leaf"})

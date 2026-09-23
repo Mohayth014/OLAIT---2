@@ -1,6 +1,7 @@
 import importlib.util
 import asyncio
 import json
+import shutil
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -138,6 +139,21 @@ async def stats():
 @app.get("/api/documents", response_model=DocumentList)
 async def documents(limit: int = Query(100, ge=1, le=1000)):
     return {"documents": list_documents(limit=limit)}
+
+
+@app.delete("/api/documents/{document_id}", status_code=204)
+async def delete_document_endpoint(document_id: str):
+    document = get_document(document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    original = Path(document["original_path"])
+    if not original.is_absolute():
+        original = BASE_DIR / original
+    original.unlink(missing_ok=True)
+    for directory in (PAGES_DIR, THUMBNAIL_DIR, CROPS_DIR):
+        shutil.rmtree(directory / document_id, ignore_errors=True)
+    from backend.database.db import delete_document
+    delete_document(document_id)
 
 
 @app.post("/api/documents/upload", response_model=DocumentSummary, status_code=202)

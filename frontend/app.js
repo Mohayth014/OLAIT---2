@@ -110,6 +110,16 @@ async function loadStats() {
     }
 }
 
+async function deleteDocument(documentId, filename) {
+    if (!window.confirm(`Delete ${filename}? This removes the original photo, OCR, and review data.`)) return;
+    const response = await fetch(`${API}/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" });
+    if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || "Could not delete document");
+    }
+    await Promise.all([loadStats(), loadDocuments("recent-documents", 5), loadDocuments("library-documents", 1000)]);
+}
+
 function renderDocuments(docs) {
     if (!docs.length) {
         return `<div class="empty-note"><i class="fa-regular fa-folder-open"></i>
@@ -125,10 +135,12 @@ function renderDocuments(docs) {
             <td>${verified}</td>
             <td><span class="badge ${cls}">${label}</span></td>
             <td>${escapeHtml(d.created_at)}</td>
+            <td><button class="delete-doc-btn" title="Delete document" aria-label="Delete ${escapeHtml(d.filename)}"
+                onclick="event.stopPropagation(); deleteDocument('${escapeHtml(d.id)}', '${escapeHtml(d.filename)}')"><i class="fa-solid fa-trash"></i></button></td>
         </tr>`;
     }).join("");
     return `<div class="history-table-wrapper"><table class="history-table">
-        <thead><tr><th>ID</th><th>File</th><th>Source type</th><th>Verified pages</th><th>Status</th><th>Added</th></tr></thead>
+        <thead><tr><th>ID</th><th>File</th><th>Source type</th><th>Verified pages</th><th>Status</th><th>Added</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
 }
 
