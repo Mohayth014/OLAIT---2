@@ -59,6 +59,9 @@
             <button class="nav-btn" id="nav-search-btn" onclick="switchView('search')">
                 <i class="fa-solid fa-magnifying-glass"></i> Search
             </button>
+            <button class="nav-btn" id="nav-review-btn" onclick="switchView('review')">
+                <i class="fa-solid fa-pen-to-square"></i> Review
+            </button>
             <button class="nav-btn" id="nav-dashboard-btn" onclick="switchView('dashboard')">
                 <i class="fa-solid fa-chart-line"></i> Dashboard
             </button>
@@ -155,6 +158,15 @@
                 <div class="card-title" style="justify-content: center;">Search</div>
                 <div class="drop-sub">Search verified Tamil, Tanglish and English, then jump to the source region.
                     Available after Phase 8.</div>
+            </div>
+        </section>
+
+        <section id="view-review" class="view-section">
+            <div class="glass-card" style="padding: 20px;">
+                <div class="card-header">
+                    <div class="card-title"><i class="fa-solid fa-pen-to-square"></i> Human Review</div>
+                </div>
+                <div id="review-content" class="empty-note">Choose a document marked Needs review from Library.</div>
             </div>
         </section>
 

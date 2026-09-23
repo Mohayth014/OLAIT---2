@@ -47,3 +47,9 @@ class HealthResponse(BaseModel):
 
 class SourceTypeUpdate(BaseModel):
     source_type: str
+
+
+class LineVerification(BaseModel):
+    reviewer: str
+    text: str
+    action: str = "edit"

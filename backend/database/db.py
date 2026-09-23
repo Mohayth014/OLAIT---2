@@ -352,6 +352,58 @@ def processed_page_numbers(document_id: str) -> List[int]:
     return [int(row["page_number"]) for row in rows]
 
 
+def get_document_review(document_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    document = conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+    if not document:
+        conn.close()
+        return None
+    pages = conn.execute(
+        "SELECT * FROM pages WHERE document_id = ? ORDER BY page_number", (document_id,)
+    ).fetchall()
+    result = dict(document)
+    result["pages"] = []
+    for page in pages:
+        page_result = dict(page)
+        page_result["lines"] = [dict(row) for row in conn.execute(
+            "SELECT * FROM lines WHERE page_id = ? ORDER BY line_order", (page["id"],)
+        ).fetchall()]
+        result["pages"].append(page_result)
+    conn.close()
+    return result
+
+
+def verify_line(line_id: int, reviewer: str, new_text: str, action: str = "edit") -> Optional[Dict[str, Any]]:
+    if action not in {"accept", "edit", "reject"}:
+        raise ValueError(f"Unknown verification action: {action}")
+    conn = get_connection()
+    line = conn.execute("SELECT * FROM lines WHERE id = ?", (line_id,)).fetchone()
+    if not line:
+        conn.close()
+        return None
+    previous_text = line["verified_text"] or line["ocr_text"]
+    conn.execute(
+        "UPDATE lines SET verified_text = ?, review_status = 'verified' WHERE id = ?",
+        (new_text, line_id),
+    )
+    conn.execute(
+        """INSERT INTO verifications (line_id, action, previous_text, new_text, reviewer, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (line_id, action, previous_text, new_text, reviewer.strip(), _now()),
+    )
+    page_id = line["page_id"]
+    remaining = conn.execute(
+        "SELECT COUNT(*) FROM lines WHERE page_id = ? AND review_status = 'needs_review'",
+        (page_id,),
+    ).fetchone()[0]
+    if remaining == 0:
+        conn.execute("UPDATE pages SET review_status = 'verified' WHERE id = ?", (page_id,))
+    conn.commit()
+    updated = conn.execute("SELECT * FROM lines WHERE id = ?", (line_id,)).fetchone()
+    conn.close()
+    return dict(updated)
+
+
 # Dashboard
 
 def get_stats() -> Dict[str, Any]:

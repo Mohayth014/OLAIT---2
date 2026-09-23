@@ -120,7 +120,7 @@ function renderDocuments(docs) {
         const verified = d.page_count ? `${d.verified_pages} / ${d.page_count}` : "–";
         return `<tr>
             <td class="mono">${escapeHtml(d.id)}</td>
-            <td>${escapeHtml(d.filename)}</td>
+            <td><button class="nav-btn" onclick="openReview('${escapeHtml(d.id)}')">${escapeHtml(d.filename)}</button></td>
             <td>${escapeHtml(SOURCE_LABELS[d.source_type] || "–")}</td>
             <td>${verified}</td>
             <td><span class="badge ${cls}">${label}</span></td>
@@ -130,6 +130,42 @@ function renderDocuments(docs) {
     return `<div class="history-table-wrapper"><table class="history-table">
         <thead><tr><th>ID</th><th>File</th><th>Source type</th><th>Verified pages</th><th>Status</th><th>Added</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
+}
+
+async function openReview(documentId) {
+    switchView("review");
+    const target = document.getElementById("review-content");
+    target.innerHTML = "Loading OCR lines...";
+    try {
+        const document = await getJson(`/documents/${encodeURIComponent(documentId)}/review`);
+        const lines = document.pages.flatMap(page => page.lines.map(line => ({ ...line, page_number: page.page_number })));
+        const reviewer = localStorage.getItem("olaiReviewer") || prompt("Reviewer name");
+        if (!reviewer?.trim()) throw new Error("A reviewer name is required.");
+        localStorage.setItem("olaiReviewer", reviewer.trim());
+        target.innerHTML = `<div class="drop-sub" style="margin-bottom: 16px;">${escapeHtml(document.filename)} &middot; ${lines.length} OCR lines</div>` +
+            (lines.length ? lines.map(line => `<div class="glass-card" style="padding: 14px; margin: 10px 0;">
+                <div class="drop-sub">Page ${line.page_number} &middot; Confidence ${Math.round((line.confidence || 0) * 100)}%</div>
+                <textarea id="line-${line.id}" style="width: 100%; margin: 8px 0; min-height: 54px;">${escapeHtml(line.verified_text || line.ocr_text)}</textarea>
+                <button class="nav-btn" onclick="verifyLine(${line.id})"><i class="fa-solid fa-check"></i> Save verification</button>
+            </div>`).join("") : "<div class='empty-note'>No OCR lines require review.</div>");
+    } catch (error) {
+        target.innerHTML = `<div class="empty-note">Could not load review: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+async function verifyLine(lineId) {
+    const text = document.getElementById(`line-${lineId}`).value;
+    const reviewer = localStorage.getItem("olaiReviewer") || prompt("Reviewer name");
+    if (!reviewer?.trim()) return;
+    localStorage.setItem("olaiReviewer", reviewer.trim());
+    const response = await fetch(`${API}/lines/${lineId}/verify`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewer, text, action: "edit" }),
+    });
+    if (!response.ok) throw new Error("Could not save verification");
+    document.getElementById(`line-${lineId}`).style.borderColor = "#10b981";
+    loadStats();
 }
 
 async function loadDocuments(targetId, limit) {

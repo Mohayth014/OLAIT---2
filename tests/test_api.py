@@ -78,6 +78,32 @@ def test_photo_upload_rejects_pdf(client):
     assert response.status_code == 415
 
 
+def test_review_and_line_verification_are_audited(client, temp_db):
+    doc = temp_db.create_document("scan.jpg", "storage/originals/scan.jpg", "camera")
+    conn = temp_db.get_connection()
+    conn.execute("INSERT INTO pages (document_id, page_number, status) VALUES (?, 1, 'ready')", (doc["id"],))
+    page_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.execute(
+          """INSERT INTO lines (page_id, line_order, ocr_text, confidence, x0, y0, x1, y1, review_status, created_at)
+              VALUES (?, 0, ?, ?, 1, 2, 30, 12, 'needs_review', ?)""",
+          (page_id, "மொழி", 0.4, "2026-09-24 00:00:00"),
+    )
+    line_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.commit()
+    conn.close()
+
+    review = client.get(f"/api/documents/{doc['id']}/review")
+    assert review.status_code == 200
+    assert review.json()["pages"][0]["lines"][0]["id"] == line_id
+    saved = client.put(f"/api/lines/{line_id}/verify", json={
+        "reviewer": "Arun", "text": "மொழி சரி", "action": "edit",
+    })
+    assert saved.status_code == 200
+    assert saved.json()["review_status"] == "verified"
+    audit = temp_db.get_connection().execute("SELECT reviewer FROM verifications").fetchone()[0]
+    assert audit == "Arun"
+
+
 def test_deleting_document_cascades_to_pages(temp_db):
     doc = temp_db.create_document("scan.jpg", "storage/originals/scan.jpg", "image")
     conn = temp_db.get_connection()

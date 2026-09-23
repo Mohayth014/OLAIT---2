@@ -17,10 +17,11 @@ from backend.config import (
 from backend.models import DocumentList, DocumentSummary, Stats, HealthResponse, EngineStatus
 from backend.database.db import (
     create_document, get_document, get_stats, init_db, list_documents, new_document_id, save_page_embedding,
-    save_recognition_page, set_document_source_type, update_document_page_count, update_document_status,
+    get_document_review, save_recognition_page, set_document_source_type, update_document_page_count,
+    update_document_status, verify_line,
 )
 from backend.config import SOURCE_TYPES
-from backend.models import SourceTypeUpdate
+from backend.models import LineVerification, SourceTypeUpdate
 from backend.pipeline.preprocessing import analyze_image_quality, create_thumbnail, load_and_orient_image, resize_for_ocr
 
 
@@ -165,6 +166,24 @@ async def document_detail(document_id: str):
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found.")
     return doc
+
+
+@app.get("/api/documents/{document_id}/review")
+async def document_review(document_id: str):
+    review = get_document_review(document_id)
+    if not review:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return review
+
+
+@app.put("/api/lines/{line_id}/verify")
+async def verify_document_line(line_id: int, verification: LineVerification):
+    if not verification.reviewer.strip():
+        raise HTTPException(status_code=422, detail="Reviewer name is required.")
+    line = verify_line(line_id, verification.reviewer, verification.text, verification.action)
+    if not line:
+        raise HTTPException(status_code=404, detail="Line not found.")
+    return line
 
 
 @app.put("/api/documents/{document_id}/source-type", response_model=DocumentSummary)
