@@ -15,9 +15,9 @@ from backend.config import (
     PAGES_DIR, STORAGE_DIR, THUMBNAIL_DIR, DEFAULT_LANGUAGE, LANGUAGE_PACKS, TESSERACT_CMD,
     PROCESSING_ROUTES,
 )
-from backend.models import DocumentList, DocumentSummary, Stats, HealthResponse, EngineStatus
+from backend.models import DashboardMetrics, DocumentList, DocumentSummary, Stats, HealthResponse, EngineStatus
 from backend.database.db import (
-    create_document, get_document, get_stats, init_db, list_documents, new_document_id, save_page_embedding,
+    create_document, get_dashboard_metrics, get_document, get_stats, init_db, list_documents, new_document_id, save_page_embedding,
     get_document_review, get_line_training_context, save_recognition_page, save_training_pair,
     set_document_source_type, update_document_page_count, update_document_status, verify_line,
 )
@@ -133,6 +133,11 @@ async def health_check():
 @app.get("/api/stats", response_model=Stats)
 async def stats():
     return get_stats()
+
+
+@app.get("/api/dashboard", response_model=DashboardMetrics)
+async def dashboard():
+    return get_dashboard_metrics()
 
 
 # API: Documents

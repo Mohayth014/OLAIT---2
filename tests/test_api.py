@@ -26,6 +26,16 @@ def test_empty_stats(client):
     assert body["documents"] == 0 and body["pages"] == 0 and body["lines_needing_review"] == 0
 
 
+def test_dashboard_metrics_are_available(client):
+    response = client.get("/api/dashboard")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["documents"] == 0
+    assert body["auto_accepted_percent"] == 0.0
+    assert body["tesseract_percent"] == 0.0
+    assert "confidence_buckets" in body
+
+
 def test_documents_list_and_detail(client, temp_db):
     assert client.get("/api/documents").json() == {"documents": []}
 

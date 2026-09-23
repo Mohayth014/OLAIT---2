@@ -70,6 +70,7 @@ function switchView(name) {
     document.getElementById(`nav-${name}-btn`)?.classList.add("active");
     document.querySelector(".header-nav")?.classList.remove("open");
     if (name === "library") loadDocuments("library-documents", 1000);
+    if (name === "dashboard") loadDashboard();
 }
 
 function toggleMobileNav() {
@@ -107,6 +108,50 @@ async function loadStats() {
         document.getElementById("stat-review").textContent = s.lines_needing_review;
     } catch (e) {
         console.error(e);
+    }
+}
+
+function metricCard(label, value, detail, tone) {
+    return `<div class="dashboard-metric ${tone || ""}">
+        <div class="dashboard-metric-label">${label}</div>
+        <div class="dashboard-metric-value">${value}</div>
+        <div class="dashboard-metric-detail">${detail}</div>
+    </div>`;
+}
+
+function renderBars(items, labelKey, title, color) {
+    if (!items.length) return `<div class="chart-empty">No data yet</div>`;
+    const max = Math.max(...items.map(item => Number(item.count)), 1);
+    return `<div class="dashboard-chart"><div class="dashboard-chart-title">${title}</div>` + items.map(item => {
+        const label = escapeHtml(item[labelKey]);
+        const width = Math.max(3, (Number(item.count) / max) * 100);
+        return `<div class="bar-row"><span class="bar-label">${label}</span><span class="bar-track"><span class="bar-fill" style="width:${width}%;background:${color}"></span></span><strong>${item.count}</strong></div>`;
+    }).join("") + `</div>`;
+}
+
+async function loadDashboard() {
+    const target = document.getElementById("dashboard-content");
+    if (!target) return;
+    target.innerHTML = `<div class="empty-note">Loading dashboard metrics...</div>`;
+    try {
+        const metrics = await getJson("/dashboard");
+        const confidence = metrics.average_confidence == null ? "—" : `${metrics.average_confidence}%`;
+        const throughput = metrics.pages_per_minute == null ? "—" : metrics.pages_per_minute;
+        target.innerHTML = `<div class="dashboard-metrics">
+            ${metricCard("Documents", metrics.documents, `${metrics.pages} pages captured`, "gold")}
+            ${metricCard("Auto-accepted", `${metrics.auto_accepted_percent}%`, "accepted without correction", "green")}
+            ${metricCard("Reviewed", `${metrics.reviewed_percent}%`, `${metrics.lines} total OCR lines`, "blue")}
+            ${metricCard("Average confidence", confidence, "PaddleOCR line confidence", "amber")}
+            ${metricCard("Pages / minute", throughput, metrics.pages_per_minute == null ? "Need 2+ timestamped pages" : "measured from completed pages", "cyan")}
+            ${metricCard("Tesseract sent", `${metrics.tesseract_percent}%`, "confidence gate + audit sample", "purple")}
+        </div>
+        <div class="dashboard-chart-grid">
+            ${renderBars(metrics.confidence_buckets, "bucket", "Confidence distribution", "#06b6d4")}
+            ${renderBars(metrics.status_breakdown, "status", "Document status", "#f59e0b")}
+            ${renderBars(metrics.source_breakdown, "source_type", "Source types", "#10b981")}
+        </div>`;
+    } catch (error) {
+        target.innerHTML = `<div class="empty-note">Could not load dashboard: ${escapeHtml(error.message)}</div>`;
     }
 }
 

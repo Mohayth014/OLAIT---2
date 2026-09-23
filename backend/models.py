@@ -31,6 +31,20 @@ class Stats(BaseModel):
     avg_confidence: Optional[float] = None
 
 
+class DashboardMetrics(BaseModel):
+    documents: int
+    pages: int
+    lines: int
+    auto_accepted_percent: float
+    reviewed_percent: float
+    average_confidence: Optional[float] = None
+    pages_per_minute: Optional[float] = None
+    tesseract_percent: float
+    status_breakdown: List[dict]
+    source_breakdown: List[dict]
+    confidence_buckets: List[dict]
+
+
 class EngineStatus(BaseModel):
     name: str
     available: bool

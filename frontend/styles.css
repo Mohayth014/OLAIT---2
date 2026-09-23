@@ -1439,6 +1439,30 @@ body {
 }
 .empty-state-card .empty-sub { font-size: 12.5px; color: var(--text-muted); }
 
+.dashboard-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 24px 4px 18px; }
+.dashboard-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.dashboard-metric { min-height: 132px; padding: 18px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); box-shadow: var(--shadow-card); border-top: 3px solid var(--accent-indigo); }
+.dashboard-metric.gold { border-top-color: var(--accent-gold); }
+.dashboard-metric.green { border-top-color: #10b981; }
+.dashboard-metric.blue { border-top-color: #3b82f6; }
+.dashboard-metric.amber { border-top-color: #f59e0b; }
+.dashboard-metric.cyan { border-top-color: #06b6d4; }
+.dashboard-metric.purple { border-top-color: #a78bfa; }
+.dashboard-metric-label { color: var(--text-secondary); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.dashboard-metric-value { margin-top: 14px; color: var(--text-primary); font-family: var(--font-mono); font-size: 28px; font-weight: 700; }
+.dashboard-metric-detail { margin-top: 8px; color: var(--text-muted); font-size: 12px; }
+.dashboard-chart-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+.dashboard-chart { min-height: 210px; padding: 18px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); }
+.dashboard-chart-title { margin-bottom: 18px; color: var(--text-primary); font-size: 14px; font-weight: 700; }
+.bar-row { display: grid; grid-template-columns: 76px 1fr 24px; align-items: center; gap: 8px; margin: 12px 0; color: var(--text-muted); font-size: 11px; }
+.bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { height: 8px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.08); }
+.bar-fill { display: block; height: 100%; border-radius: inherit; }
+.bar-row strong { color: var(--text-secondary); text-align: right; }
+.chart-empty { color: var(--text-muted); font-size: 12px; }
+@media (max-width: 900px) { .dashboard-metrics, .dashboard-chart-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .dashboard-heading { align-items: start; flex-direction: column; } .dashboard-metrics, .dashboard-chart-grid { grid-template-columns: 1fr; } }
+
 /* OCR review: image coordinates remain linked to editable line cards. */
 .review-page { margin-top: 18px; }
 .review-page-title { color: var(--text-secondary); font-size: 13px; font-weight: 700; margin-bottom: 10px; }

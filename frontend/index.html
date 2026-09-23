@@ -172,11 +172,15 @@
 
         <!-- ================= VIEW 4: DASHBOARD ================= -->
         <section id="view-dashboard" class="view-section">
-            <div class="glass-card empty-state-card">
-                <i class="fa-solid fa-chart-line"></i>
-                <div class="card-title" style="justify-content: center;">Dashboard</div>
-                <div class="drop-sub">Processing speed, confidence and review progress. Available after Phase 10.
+            <div class="dashboard-heading">
+                <div>
+                    <div class="olai-hero-title">Operations Dashboard</div>
+                    <div class="drop-sub">Recognition quality, review workload, and processing throughput.</div>
                 </div>
+                <button class="nav-btn" onclick="loadDashboard()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+            </div>
+            <div id="dashboard-content" class="dashboard-content">
+                <div class="empty-note">Loading dashboard metrics...</div>
             </div>
         </section>
     </main>

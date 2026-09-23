@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS lines (
     ocr_text            TEXT NOT NULL,
     confidence          REAL,
     engine              TEXT,                       -- paddle | tesseract | consensus | text_layer
+    tesseract_checked   INTEGER NOT NULL DEFAULT 0,
     x0 REAL, y0 REAL, x1 REAL, y1 REAL,
     review_status       TEXT NOT NULL DEFAULT 'accepted', -- accepted | needs_review | verified | corrected
     verified_text       TEXT,
@@ -160,6 +161,9 @@ def init_db():
     # WAL lets the background pipeline write while the UI reads.
     conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(lines)").fetchall()}
+    if "tesseract_checked" not in columns:
+        conn.execute("ALTER TABLE lines ADD COLUMN tesseract_checked INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -331,10 +335,11 @@ def save_recognition_page(document_id: str, page_number: int, lines: List[Dict[s
         for line in region_lines:
             conn.execute(
                 """INSERT INTO lines
-                   (page_id, region_id, line_order, ocr_text, confidence, engine, x0, y0, x1, y1, review_status, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                     (page_id, region_id, line_order, ocr_text, confidence, engine, tesseract_checked,
+                                        x0, y0, x1, y1, review_status, created_at)
+                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (page_id, region_id, line.get("line_order", 0), line.get("text", ""),
-                 line.get("confidence"), line.get("engine", "paddle"), *line["bbox"],
+                                 line.get("confidence"), line.get("engine", "paddle"), int(line.get("tesseract") is not None), *line["bbox"],
                  "needs_review" if float(line.get("confidence", 0)) < 0.8 else "accepted", _now()),
             )
     conn.commit()
@@ -447,3 +452,64 @@ def get_stats() -> Dict[str, Any]:
     }
     conn.close()
     return stats
+
+
+def get_dashboard_metrics() -> Dict[str, Any]:
+    conn = get_connection()
+    total_documents = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    total_pages = conn.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
+    total_lines = conn.execute("SELECT COUNT(*) FROM lines").fetchone()[0]
+    accepted_lines = conn.execute(
+        "SELECT COUNT(*) FROM lines WHERE review_status = 'accepted'"
+    ).fetchone()[0]
+    reviewed_lines = conn.execute(
+        "SELECT COUNT(*) FROM lines WHERE review_status IN ('verified', 'corrected')"
+    ).fetchone()[0]
+    tesseract_lines = conn.execute(
+        "SELECT COUNT(*) FROM lines WHERE tesseract_checked = 1"
+    ).fetchone()[0]
+    average_confidence = conn.execute(
+        "SELECT AVG(confidence) FROM lines WHERE confidence IS NOT NULL"
+    ).fetchone()[0]
+    status_rows = conn.execute(
+        "SELECT status, COUNT(*) AS count FROM documents GROUP BY status ORDER BY status"
+    ).fetchall()
+    source_rows = conn.execute(
+        """SELECT COALESCE(source_type, 'unknown') AS source_type, COUNT(*) AS count
+           FROM documents GROUP BY COALESCE(source_type, 'unknown') ORDER BY count DESC"""
+    ).fetchall()
+    confidence_rows = conn.execute(
+        """SELECT CASE
+                    WHEN confidence < 0.5 THEN '0-49%'
+                    WHEN confidence < 0.8 THEN '50-79%'
+                    WHEN confidence < 0.95 THEN '80-94%'
+                    ELSE '95-100%'
+                END AS bucket, COUNT(*) AS count
+           FROM lines WHERE confidence IS NOT NULL GROUP BY bucket
+           ORDER BY bucket"""
+    ).fetchall()
+    processed_rows = conn.execute(
+        "SELECT processed_at FROM pages WHERE status = 'ready' AND processed_at IS NOT NULL ORDER BY processed_at"
+    ).fetchall()
+    pages_per_minute = None
+    if len(processed_rows) >= 2:
+        first = datetime.strptime(processed_rows[0]["processed_at"], "%Y-%m-%d %H:%M:%S")
+        last = datetime.strptime(processed_rows[-1]["processed_at"], "%Y-%m-%d %H:%M:%S")
+        elapsed_minutes = (last - first).total_seconds() / 60
+        if elapsed_minutes > 0:
+            pages_per_minute = round(len(processed_rows) / elapsed_minutes, 2)
+    conn.close()
+    percentage = lambda value, denominator: round(value * 100 / denominator, 1) if denominator else 0.0
+    return {
+        "documents": total_documents,
+        "pages": total_pages,
+        "lines": total_lines,
+        "auto_accepted_percent": percentage(accepted_lines, total_lines),
+        "reviewed_percent": percentage(reviewed_lines, total_lines),
+        "average_confidence": round(float(average_confidence) * 100, 1) if average_confidence is not None else None,
+        "pages_per_minute": pages_per_minute,
+        "tesseract_percent": percentage(tesseract_lines, total_lines),
+        "status_breakdown": [dict(row) for row in status_rows],
+        "source_breakdown": [dict(row) for row in source_rows],
+        "confidence_buckets": [dict(row) for row in confidence_rows],
+    }
