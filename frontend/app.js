@@ -1,6 +1,8 @@
 // OLAI desktop client
 
 const API = "/api";
+let cameraStream = null;
+let capturedPhoto = null;
 
 const STATUS_BADGES = {
     uploaded: ["badge-review", "Uploaded"],
@@ -45,6 +47,48 @@ async function uploadPhoto(file) {
     } catch (error) {
         status.textContent = `Could not process photo: ${error.message}`;
     }
+}
+
+function closeCamera() {
+    cameraStream?.getTracks().forEach(track => track.stop());
+    cameraStream = null;
+    capturedPhoto = null;
+    const modal = document.getElementById("camera-modal");
+    if (modal) modal.hidden = true;
+    document.getElementById("camera-preview")?.removeAttribute("srcObject");
+}
+
+async function openCamera() {
+    const modal = document.getElementById("camera-modal");
+    const video = document.getElementById("camera-preview");
+    const error = document.getElementById("camera-error");
+    modal.hidden = false;
+    error.hidden = true;
+    try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported in this browser.");
+        cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+        video.srcObject = cameraStream;
+        await video.play();
+    } catch (cameraError) {
+        error.hidden = false;
+        error.textContent = `${cameraError.message} Select a photo instead.`;
+        setTimeout(() => document.getElementById("camera-upload")?.click(), 250);
+    }
+}
+
+function snapCamera() {
+    const video = document.getElementById("camera-preview");
+    const canvas = document.getElementById("camera-canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+        capturedPhoto = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+        video.hidden = true;
+        document.getElementById("camera-snap").hidden = true;
+        document.getElementById("camera-retake").hidden = false;
+        document.getElementById("camera-use").hidden = false;
+    }, "image/jpeg", 0.92);
 }
 
 async function pollDocument(documentId, status) {
@@ -281,6 +325,20 @@ async function loadDocuments(targetId, limit) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("camera-launch")?.addEventListener("click", openCamera);
+    document.getElementById("camera-close")?.addEventListener("click", closeCamera);
+    document.getElementById("camera-snap")?.addEventListener("click", snapCamera);
+    document.getElementById("camera-retake")?.addEventListener("click", () => {
+        capturedPhoto = null;
+        document.getElementById("camera-preview").hidden = false;
+        document.getElementById("camera-snap").hidden = false;
+        document.getElementById("camera-retake").hidden = true;
+        document.getElementById("camera-use").hidden = true;
+    });
+    document.getElementById("camera-use")?.addEventListener("click", () => {
+        if (capturedPhoto) uploadPhoto(capturedPhoto);
+        closeCamera();
+    });
     ["document-upload", "camera-upload"].forEach(id => {
         document.getElementById(id)?.addEventListener("change", event => {
             const [file] = event.target.files;

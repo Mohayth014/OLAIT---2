@@ -1,6 +1,8 @@
 // OLAI mobile client
 
 const API = "/api";
+let mobileCameraStream = null;
+let mobileCapturedPhoto = null;
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, c => ({
@@ -40,6 +42,45 @@ async function uploadPhoto(file) {
     } catch (error) {
         status.textContent = `Could not process photo: ${error.message}`;
     }
+}
+
+async function openMobileCamera() {
+    const modal = document.getElementById("m-camera-modal");
+    const video = document.getElementById("m-camera-preview");
+    const error = document.getElementById("m-camera-error");
+    modal.hidden = false;
+    error.hidden = true;
+    try {
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error("Live camera is not supported.");
+        mobileCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        video.srcObject = mobileCameraStream;
+        await video.play();
+    } catch (cameraError) {
+        error.hidden = false;
+        error.textContent = `${cameraError.message} Choose a photo instead.`;
+        setTimeout(() => document.getElementById("m-camera-upload")?.click(), 250);
+    }
+}
+
+function closeMobileCamera() {
+    mobileCameraStream?.getTracks().forEach(track => track.stop());
+    mobileCameraStream = null;
+    document.getElementById("m-camera-modal").hidden = true;
+}
+
+function snapMobileCamera() {
+    const video = document.getElementById("m-camera-preview");
+    const canvas = document.getElementById("m-camera-canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+        mobileCapturedPhoto = new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" });
+        video.hidden = true;
+        document.getElementById("m-camera-snap").hidden = true;
+        document.getElementById("m-camera-retake").hidden = false;
+        document.getElementById("m-camera-use").hidden = false;
+    }, "image/jpeg", 0.92);
 }
 
 function switchView(name) {
@@ -91,6 +132,20 @@ async function loadStats() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("m-camera-launch")?.addEventListener("click", openMobileCamera);
+    document.getElementById("m-camera-close")?.addEventListener("click", closeMobileCamera);
+    document.getElementById("m-camera-snap")?.addEventListener("click", snapMobileCamera);
+    document.getElementById("m-camera-retake")?.addEventListener("click", () => {
+        mobileCapturedPhoto = null;
+        document.getElementById("m-camera-preview").hidden = false;
+        document.getElementById("m-camera-snap").hidden = false;
+        document.getElementById("m-camera-retake").hidden = true;
+        document.getElementById("m-camera-use").hidden = true;
+    });
+    document.getElementById("m-camera-use")?.addEventListener("click", () => {
+        if (mobileCapturedPhoto) uploadPhoto(mobileCapturedPhoto);
+        closeMobileCamera();
+    });
     ["m-camera-upload", "m-document-upload"].forEach(id => {
         document.getElementById(id)?.addEventListener("change", event => {
             const [file] = event.target.files;

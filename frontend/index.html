@@ -100,12 +100,13 @@
                     </label>
                 </div>
                 <div class="glass-card olai-input-card">
-                    <label class="drop-zone" for="camera-upload">
+                    <button class="drop-zone camera-launch" id="camera-launch" type="button">
                         <i class="fa-solid fa-camera drop-icon"></i>
-                        <div class="drop-title">Take a Photo</div>
+                        <div class="drop-title">Use Camera</div>
                         <div class="drop-sub">Photograph a page; OLAI crops and straightens it</div>
-                        <input id="camera-upload" type="file" accept="image/*" capture="environment" hidden>
-                    </label>
+                    </button>
+                    <label class="camera-fallback" for="camera-upload">Camera unavailable? Choose a photo instead.</label>
+                    <input id="camera-upload" type="file" accept="image/*" capture="environment" hidden>
                 </div>
             </div>
             <div id="upload-status" class="empty-note" hidden></div>
@@ -184,6 +185,16 @@
             </div>
         </section>
     </main>
+
+    <div class="camera-modal" id="camera-modal" hidden>
+        <div class="camera-dialog" role="dialog" aria-modal="true" aria-labelledby="camera-title">
+            <div class="camera-dialog-head"><strong id="camera-title">Take a photo</strong><button type="button" id="camera-close" class="camera-close" aria-label="Close camera"><i class="fa-solid fa-xmark"></i></button></div>
+            <video id="camera-preview" autoplay playsinline muted></video>
+            <canvas id="camera-canvas" hidden></canvas>
+            <div class="camera-actions"><button type="button" id="camera-snap" class="btn btn-primary"><i class="fa-solid fa-camera"></i> Capture</button><button type="button" id="camera-retake" class="btn btn-secondary" hidden>Retake</button><button type="button" id="camera-use" class="btn btn-accent" hidden>Use photo</button></div>
+            <div id="camera-error" class="camera-error" hidden></div>
+        </div>
+    </div>
 
     <script src="app.js"></script>
 </body>

@@ -38,10 +38,11 @@
                 <div class="mhero-sub tamil">தமிழ் ஆவணங்களை எண்ணிமமாக்குதல்</div>
 
                 <div class="mcapture" style="margin-top: 14px;">
-                    <label class="mbig-btn gold" for="m-camera-upload">
+                    <button class="mbig-btn gold" id="m-camera-launch" type="button">
                         <i class="fa-solid fa-camera"></i><span>Scan with camera</span>
-                        <input id="m-camera-upload" type="file" accept="image/*" capture="environment" hidden>
-                    </label>
+                    </button>
+                    <label class="m-camera-fallback" for="m-camera-upload">Camera unavailable? Choose a photo.</label>
+                    <input id="m-camera-upload" type="file" accept="image/*" capture="environment" hidden>
                     <label class="mbig-btn ghost" for="m-document-upload">
                         <i class="fa-solid fa-file-arrow-up"></i><span>Upload document</span>
                         <input id="m-document-upload" type="file" accept="image/*" hidden>
@@ -63,6 +64,10 @@
                 <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
         </section>
     </main>
+
+    <div class="m-camera-modal" id="m-camera-modal" hidden>
+        <div class="m-camera-dialog"><div class="m-camera-head"><strong>Take a photo</strong><button id="m-camera-close" type="button">×</button></div><video id="m-camera-preview" autoplay playsinline muted></video><canvas id="m-camera-canvas" hidden></canvas><div class="m-camera-actions"><button id="m-camera-snap" type="button" class="mbig-btn gold">Capture</button><button id="m-camera-retake" type="button" class="mbig-btn ghost" hidden>Retake</button><button id="m-camera-use" type="button" class="mbig-btn gold" hidden>Use photo</button></div><div id="m-camera-error" class="m-camera-error" hidden></div></div>
+    </div>
 
     <nav class="mnav">
         <button class="mnav-btn active" data-view="scan"><i class="fa-solid fa-camera"></i><span>Scan</span></button>
