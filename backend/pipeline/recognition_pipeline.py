@@ -16,6 +16,7 @@ from backend.config import (
     TESSERACT_GATE_CONFIDENCE,
 )
 from backend.pipeline.layout_service import group_lines_into_regions
+from backend.pipeline.preprocessing import enhance_engraved_script
 
 
 def sample_page_numbers(page_count: int, sample_count: int = CLIP_SAMPLE_PAGES) -> List[int]:
@@ -96,6 +97,7 @@ async def classify_samples_and_ocr_first_pages(
     ocr_engine: Any,
     language: str,
     rec_model: Optional[str],
+    ocr_images: Optional[Sequence[Image.Image]] = None,
 ) -> Dict[str, Any]:
     """Run CLIP sampling alongside OCR of the initial pages."""
     clip_task = asyncio.gather(*[
@@ -103,8 +105,9 @@ async def classify_samples_and_ocr_first_pages(
         for index in sample_indexes
     ])
     first_page_indexes = list(range(min(2, len(images))))
+    ocr_inputs = ocr_images or images
     ocr_task = asyncio.gather(*[
-        asyncio.to_thread(ocr_engine.read_page, images[index], language, rec_model)
+        asyncio.to_thread(ocr_engine.read_page, ocr_inputs[index], language, rec_model)
         for index in first_page_indexes
     ])
     classifications, first_pages = await asyncio.gather(clip_task, ocr_task)
@@ -126,20 +129,34 @@ async def recognize_pages(
 ) -> List[Dict[str, Any]]:
     """Recognize pages with one Paddle reader and pipelined CPU second opinions."""
     route = PROCESSING_ROUTES.get(source_type, PROCESSING_ROUTES["modern_print"])
+    ocr_images = [enhance_engraved_script(image) if source_type in {"palm_leaf", "inscription"} else image
+                  for image in images]
     sample_indexes = sample_page_numbers(len(images))
     initial = await classify_samples_and_ocr_first_pages(
-        images, sample_indexes, clip_engine, ocr_engine, language, route.get("paddle_rec_model"),
+        images, sample_indexes, clip_engine, ocr_engine, language, route.get("paddle_rec_model"), ocr_images,
     )
+    detected_source = initial["source_vote"].get("source_type")
+    if detected_source in {"palm_leaf", "inscription"} and detected_source != source_type:
+        # CLIP and first-page OCR ran concurrently; only redo those first pages
+        # when source detection selects a route-specific preprocessing path.
+        route = PROCESSING_ROUTES.get(detected_source, route)
+        ocr_images = [enhance_engraved_script(image) for image in images]
+        first_page_indexes = list(range(min(2, len(images))))
+        first_pages = await asyncio.gather(*[
+            asyncio.to_thread(ocr_engine.read_page, ocr_images[index], language, route.get("paddle_rec_model"))
+            for index in first_page_indexes
+        ])
+        initial["first_pages"] = dict(zip(first_page_indexes, first_pages))
     paddle_pages = initial["first_pages"]
     results: List[Dict[str, Any]] = []
     for page_number, image in enumerate(images):
         if page_number not in paddle_pages:
             paddle_pages[page_number] = await asyncio.to_thread(
-                ocr_engine.read_page, image, language, route.get("paddle_rec_model"),
+                ocr_engine.read_page, ocr_images[page_number], language, route.get("paddle_rec_model"),
             )
         lines = group_lines_into_regions(paddle_pages[page_number])
         lines = await asyncio.to_thread(
-            apply_tesseract_gate, image, lines, ocr_engine, language, document_id,
+            apply_tesseract_gate, ocr_images[page_number], lines, ocr_engine, language, document_id,
             page_number + 1, rng,
         )
         results.append({"page_number": page_number + 1, "lines": lines})

@@ -83,3 +83,14 @@ def create_thumbnail(img: Image.Image, max_dim: int = 320) -> Image.Image:
     thumb = img.copy()
     thumb.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
     return thumb
+
+
+def enhance_engraved_script(img: Image.Image) -> Image.Image:
+    """Improve local contrast for engraved palm-leaf and inscription strokes.
+
+    This preserves the original dimensions so OCR boxes remain valid. It is a
+    recognition input only; the untouched normalized page remains the provenance image.
+    """
+    gray = cv2.cvtColor(np.array(img.convert("RGB")), cv2.COLOR_RGB2GRAY)
+    enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(gray)
+    return Image.fromarray(cv2.cvtColor(enhanced, cv2.COLOR_GRAY2RGB))

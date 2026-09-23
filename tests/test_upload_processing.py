@@ -4,6 +4,7 @@ from PIL import Image
 
 from backend import app as app_module
 from backend.database import db
+from backend.pipeline.preprocessing import enhance_engraved_script
 
 
 def test_embedding_storage_accepts_numpy_values(temp_db):
@@ -13,6 +14,12 @@ def test_embedding_storage_accepts_numpy_values(temp_db):
     page_id = temp_db.upsert_page(doc["id"], 1, status="ready")
     temp_db.save_page_embedding(page_id, np.array([np.float32(0.25), np.float32(0.75)]), "clip")
     assert temp_db.list_page_embeddings()[0]["embedding"] == [0.25, 0.75]
+
+
+def test_engraved_preprocessing_preserves_dimensions():
+    image = Image.new("RGB", (120, 40), "#9b5b2c")
+    enhanced = enhance_engraved_script(image)
+    assert enhanced.size == image.size
 
 
 def test_process_photo_marks_review_after_recognition(temp_db, monkeypatch, tmp_path):

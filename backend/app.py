@@ -17,8 +17,8 @@ from backend.config import (
 from backend.models import DocumentList, DocumentSummary, Stats, HealthResponse, EngineStatus
 from backend.database.db import (
     create_document, get_document, get_stats, init_db, list_documents, new_document_id, save_page_embedding,
-    get_document_review, save_recognition_page, set_document_source_type, update_document_page_count,
-    update_document_status, verify_line,
+    get_document_review, get_line_training_context, save_recognition_page, save_training_pair,
+    set_document_source_type, update_document_page_count, update_document_status, verify_line,
 )
 from backend.config import SOURCE_TYPES
 from backend.models import LineVerification, SourceTypeUpdate
@@ -183,6 +183,23 @@ async def verify_document_line(line_id: int, verification: LineVerification):
     line = verify_line(line_id, verification.reviewer, verification.text, verification.action)
     if not line:
         raise HTTPException(status_code=404, detail="Line not found.")
+    context = get_line_training_context(line_id)
+    if context and context["image_path"] and verification.text.strip():
+        image_path = STORAGE_DIR / context["image_path"]
+        if image_path.exists():
+            from PIL import Image
+            crop_dir = CROPS_DIR / "training_pairs" / (context["source_type"] or "unknown")
+            crop_dir.mkdir(parents=True, exist_ok=True)
+            crop_path = crop_dir / f"line-{line_id}.png"
+            with Image.open(image_path) as image:
+                image.crop((
+                    max(0, round(context["x0"] - 4)), max(0, round(context["y0"] - 4)),
+                    min(image.width, round(context["x1"] + 4)), min(image.height, round(context["y1"] + 4)),
+                )).save(crop_path)
+            save_training_pair(
+                line_id, str(crop_path.relative_to(STORAGE_DIR)).replace("\\", "/"),
+                verification.text.strip(), context["source_type"], context["language"],
+            )
     return line
 
 

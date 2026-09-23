@@ -404,6 +404,34 @@ def verify_line(line_id: int, reviewer: str, new_text: str, action: str = "edit"
     return dict(updated)
 
 
+def get_line_training_context(line_id: int) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    row = conn.execute(
+        """SELECT l.id, l.page_id, l.x0, l.y0, l.x1, l.y1,
+                  p.image_path, d.source_type, d.language
+           FROM lines l JOIN pages p ON p.id = l.page_id
+           JOIN documents d ON d.id = p.document_id
+           WHERE l.id = ?""",
+        (line_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_training_pair(line_id: int, crop_path: str, text: str,
+                       source_type: Optional[str], language: Optional[str]) -> int:
+    conn = get_connection()
+    cursor = conn.execute(
+        """INSERT INTO training_pairs (line_id, crop_path, text, source_type, language, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (line_id, crop_path, text, source_type, language, _now()),
+    )
+    conn.commit()
+    pair_id = cursor.lastrowid
+    conn.close()
+    return int(pair_id)
+
+
 # Dashboard
 
 def get_stats() -> Dict[str, Any]:

@@ -5,6 +5,7 @@ from PIL import Image
 from backend.pipeline.layout_service import group_lines_into_regions
 from backend.pipeline.recognition_pipeline import (
     apply_tesseract_gate,
+    recognize_pages,
     sample_page_numbers,
     weighted_source_vote,
 )
@@ -56,3 +57,28 @@ def test_layout_orders_two_columns():
         {"text": "D", "bbox": [200, 30, 270, 40]},
     ]
     assert [line["text"] for line in group_lines_into_regions(lines)] == ["A", "C", "B", "D"]
+
+
+def test_clip_palm_leaf_vote_reprocesses_first_pages(monkeypatch):
+    seen_images = []
+
+    class FakeClip:
+        def classify_source_type(self, image):
+            return [{"source_type": "palm_leaf", "confidence": 1.0}]
+
+    class FakeOCR:
+        def read_page(self, image, language, rec_model=None):
+            seen_images.append(image.getpixel((0, 0)))
+            return [{"text": "தமிழ்", "confidence": 0.99, "bbox": [0, 0, 10, 10], "engine": "paddle"}]
+
+        def read_line(self, crop, language):
+            return {"text": "தமிழ்", "confidence": 0.9, "engine": "tesseract"}
+
+    image = Image.new("RGB", (40, 40), (150, 80, 40))
+    monkeypatch.setattr("backend.pipeline.recognition_pipeline.apply_tesseract_gate", lambda image, lines, *args, **kwargs: lines)
+    result = __import__("asyncio").run(recognize_pages(
+        [image], "DOC-ROUTE", "ta", "modern_print", FakeClip(), FakeOCR(),
+    ))
+    assert result[0]["source_vote"]["source_type"] == "palm_leaf"
+    assert len(seen_images) == 2
+    assert seen_images[0] != seen_images[1]
