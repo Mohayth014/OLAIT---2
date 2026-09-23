@@ -2716,6 +2716,7 @@ body {
 .camera-launch { color: inherit; font: inherit; }
 .camera-fallback { display: block; margin-top: 9px; color: var(--text-muted); font-size: 11px; text-align: center; cursor: pointer; }
 .camera-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(4, 4, 12, .82); }
+.camera-modal[hidden] { display: none !important; }
 .camera-dialog { width: min(720px, 100%); padding: 18px; border: 1px solid var(--border-color); border-radius: var(--radius-lg); background: var(--bg-card); box-shadow: var(--shadow-card); }
 .camera-dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; color: var(--text-primary); }
 .camera-close { border: 0; background: transparent; color: var(--text-secondary); font-size: 18px; cursor: pointer; }

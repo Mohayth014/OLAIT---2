@@ -142,6 +142,7 @@ a { color: inherit; }
 .mbig-btn:active { transform: scale(.985); }
 .m-camera-fallback { display: block; color: var(--txt-3); font-size: 11px; text-align: center; }
 .m-camera-modal { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 14px; background: rgba(4,4,12,.86); }
+.m-camera-modal[hidden] { display: none !important; }
 .m-camera-dialog { width: 100%; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
 .m-camera-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; color: var(--txt); }
 .m-camera-head button { border: 0; background: transparent; color: var(--txt-2); font-size: 24px; }
