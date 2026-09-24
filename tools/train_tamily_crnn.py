@@ -18,6 +18,7 @@ import numpy as np
 import pyarrow.parquet as pq
 import torch
 from PIL import Image, ImageOps
+from PIL import ImageEnhance, ImageFilter
 from torch import nn
 from torch.cuda.amp import GradScaler, autocast
 
@@ -27,17 +28,32 @@ IMAGE_WIDTH = 640
 VAL_MODULUS = 10
 
 
-def load_labels(parquet_path: Path) -> List[str]:
-    table = pq.read_table(parquet_path, columns=["text"])
-    return [str(value) for value in table.column("text").to_pylist()]
+def resolve_data_paths(data_path: Path) -> List[Path]:
+    paths = sorted(data_path.glob("*.parquet")) if data_path.is_dir() else [data_path]
+    if not paths:
+        raise FileNotFoundError(f"No Parquet shards found under {data_path}")
+    return paths
+
+
+def load_labels(parquet_paths: Sequence[Path]) -> List[str]:
+    labels = []
+    for parquet_path in parquet_paths:
+        table = pq.read_table(parquet_path, columns=["text"])
+        labels.extend(str(value) for value in table.column("text").to_pylist())
+    return labels
 
 
 def build_charset(labels: Sequence[str]) -> List[str]:
     return sorted(set("".join(labels)))
 
 
-def preprocess_image(image_bytes: bytes) -> torch.Tensor:
+def preprocess_image(image_bytes: bytes, augment: bool = False) -> torch.Tensor:
     image = Image.open(io.BytesIO(image_bytes)).convert("L")
+    if augment:
+        if random.random() < 0.35:
+            image = ImageEnhance.Contrast(image).enhance(random.uniform(0.75, 1.3))
+        if random.random() < 0.25:
+            image = image.filter(ImageFilter.GaussianBlur(random.uniform(0.2, 0.7)))
     scale = IMAGE_HEIGHT / image.height
     width = min(IMAGE_WIDTH, max(1, round(image.width * scale)))
     image = image.resize((width, IMAGE_HEIGHT), Image.Resampling.LANCZOS)
@@ -47,16 +63,17 @@ def preprocess_image(image_bytes: bytes) -> torch.Tensor:
     return torch.from_numpy((array - 0.5) / 0.5).unsqueeze(0)
 
 
-def iter_samples(parquet_path: Path, validation: bool) -> Iterable[Tuple[bytes, str]]:
-    parquet = pq.ParquetFile(parquet_path)
+def iter_samples(parquet_paths: Sequence[Path], validation: bool) -> Iterable[Tuple[bytes, str]]:
     row_index = 0
-    for group_index in range(parquet.num_row_groups):
-        table = parquet.read_row_group(group_index, columns=["image", "text"])
-        for image, text in zip(table.column("image").to_pylist(), table.column("text").to_pylist()):
-            is_validation = row_index % VAL_MODULUS == 0
-            if is_validation == validation:
-                yield image["bytes"], str(text)
-            row_index += 1
+    for parquet_path in parquet_paths:
+        parquet = pq.ParquetFile(parquet_path)
+        for group_index in range(parquet.num_row_groups):
+            table = parquet.read_row_group(group_index, columns=["image", "text"])
+            for image, text in zip(table.column("image").to_pylist(), table.column("text").to_pylist()):
+                is_validation = row_index % VAL_MODULUS == 0
+                if is_validation == validation:
+                    yield image["bytes"], str(text)
+                row_index += 1
 
 
 def make_batches(samples: List[Tuple[bytes, str]], batch_size: int, shuffle: bool) -> Iterable[List[Tuple[bytes, str]]]:
@@ -70,8 +87,8 @@ def encode_text(text: str, char_to_id: dict[str, int]) -> List[int]:
     return [char_to_id[char] for char in text]
 
 
-def collate(samples: Sequence[Tuple[bytes, str]], char_to_id: dict[str, int]):
-    images = torch.stack([preprocess_image(image) for image, _ in samples])
+def collate(samples: Sequence[Tuple[bytes, str]], char_to_id: dict[str, int], augment: bool = False):
+    images = torch.stack([preprocess_image(image, augment=augment) for image, _ in samples])
     encoded = [encode_text(text, char_to_id) for _, text in samples]
     targets = torch.tensor([item for sequence in encoded for item in sequence], dtype=torch.long)
     target_lengths = torch.tensor([len(sequence) for sequence in encoded], dtype=torch.long)
@@ -155,26 +172,49 @@ def main():
     parser.add_argument("--epochs", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--output", type=Path, default=Path("storage/exports/tamily-1/tamil-crnn.pt"))
+    parser.add_argument("--resume", action="store_true", help="resume model and optimizer state from --output")
+    parser.add_argument("--target-exact", type=float, default=80.0)
+    parser.add_argument("--patience", type=int, default=8)
     args = parser.parse_args()
     torch.manual_seed(7)
     random.seed(7)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    labels = load_labels(args.data)
+    data_paths = resolve_data_paths(args.data)
+    labels = load_labels(data_paths)
     charset = build_charset(labels)
     char_to_id = {char: index + 1 for index, char in enumerate(charset)}
     id_to_char = {index: char for char, index in char_to_id.items()}
-    train_samples = list(iter_samples(args.data, validation=False))
-    validation_samples = list(iter_samples(args.data, validation=True))
+    train_samples = list(iter_samples(data_paths, validation=False))
+    validation_samples = list(iter_samples(data_paths, validation=True))
     model = TamilCRNN(len(charset)).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4, weight_decay=1e-4)
     criterion = nn.CTCLoss(blank=0, zero_infinity=True)
     scaler = GradScaler(enabled=device.type == "cuda")
     history = []
-    for epoch in range(1, args.epochs + 1):
+    start_epoch = 1
+    if args.resume and args.output.exists():
+        checkpoint = torch.load(args.output, map_location=device)
+        if checkpoint.get("charset") != charset:
+            raise ValueError("Checkpoint charset does not match the dataset")
+        model.load_state_dict(checkpoint["model"])
+        if "optimizer" in checkpoint:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+        if "scaler" in checkpoint:
+            scaler.load_state_dict(checkpoint["scaler"])
+        start_epoch = int(checkpoint.get("epoch", 0)) + 1
+        history_path = args.output.with_suffix(".json")
+        if not history_path.exists():
+            history_path = args.output.with_name("tamil-crnn.json")
+        history = json.loads(history_path.read_text(encoding="utf-8")).get("history", [])
+    best_cer = min((record["cer_percent"] for record in history), default=float("inf"))
+    best_exact = max((record["exact_match_percent"] for record in history), default=0.0)
+    best_epoch = max((record["epoch"] for record in history if record["cer_percent"] == best_cer), default=0)
+    stale_epochs = 0
+    for epoch in range(start_epoch, args.epochs + 1):
         model.train()
         losses = []
         for batch in make_batches(train_samples, args.batch_size, shuffle=True):
-            images, targets, target_lengths = collate(batch, char_to_id)
+            images, targets, target_lengths = collate(batch, char_to_id, augment=True)
             images = images.to(device)
             targets = targets.to(device)
             optimizer.zero_grad(set_to_none=True)
@@ -191,12 +231,32 @@ def main():
         metrics = evaluate(model, validation_samples, char_to_id, id_to_char, device, args.batch_size)
         record = {"epoch": epoch, "loss": round(float(np.mean(losses)), 4), **metrics}
         history.append(record)
+        improved = metrics["cer_percent"] < best_cer or (
+            metrics["cer_percent"] == best_cer and metrics["exact_match_percent"] > best_exact
+        )
+        if improved:
+            best_cer = metrics["cer_percent"]
+            best_exact = metrics["exact_match_percent"]
+            best_epoch = epoch
+            stale_epochs = 0
+            torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scaler": scaler.state_dict(),
+                        "epoch": epoch, "charset": charset, "image_height": IMAGE_HEIGHT,
+                        "image_width": IMAGE_WIDTH, "best_cer_percent": best_cer,
+                        "best_exact_match_percent": best_exact}, args.output.with_name(args.output.stem + "-best.pt"))
+        else:
+            stale_epochs += 1
         print(json.dumps(record, ensure_ascii=False), flush=True)
+        if metrics["exact_match_percent"] >= args.target_exact or stale_epochs >= args.patience:
+            break
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"model": model.state_dict(), "charset": charset, "image_height": IMAGE_HEIGHT, "image_width": IMAGE_WIDTH}, args.output)
+    torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(), "scaler": scaler.state_dict(),
+                "epoch": history[-1]["epoch"], "charset": charset, "image_height": IMAGE_HEIGHT,
+                "image_width": IMAGE_WIDTH, "best_cer_percent": best_cer}, args.output)
     report = args.output.with_suffix(".json")
     report.write_text(json.dumps({"data": str(args.data), "device": str(device), "history": history}, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"checkpoint": str(args.output), "report": str(report), "final": history[-1]}, ensure_ascii=False), flush=True)
+    print(json.dumps({"checkpoint": str(args.output), "best_checkpoint": str(args.output.with_name(args.output.stem + "-best.pt")),
+                      "best_epoch": best_epoch, "best_exact_match_percent": best_exact,
+                      "best_cer_percent": best_cer, "final": history[-1]}, ensure_ascii=False), flush=True)
 
 
 if __name__ == "__main__":
